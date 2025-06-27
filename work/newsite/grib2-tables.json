@@ -1,0 +1,135 @@
+{
+  "0": {
+    "name": "Meteorological products",
+    "categories": {
+      "0": {
+        "name": "Temperature",
+        "parameters": {
+          "0": {"shortName": "TMP", "name": "Temperature", "unit": "K"},
+          "1": {"shortName": "VTMP", "name": "Virtual temperature", "unit": "K"},
+          "2": {"shortName": "POT", "name": "Potential temperature", "unit": "K"},
+          "3": {"shortName": "EPOT", "name": "Pseudo-adiabatic potential temperature", "unit": "K"},
+          "4": {"shortName": "TMAX", "name": "Maximum temperature", "unit": "K"},
+          "5": {"shortName": "TMIN", "name": "Minimum temperature", "unit": "K"},
+          "6": {"shortName": "DPT", "name": "Dew point temperature", "unit": "K"},
+          "7": {"shortName": "DEPR", "name": "Dew point depression (or deficit)", "unit": "K"},
+          "8": {"shortName": "LAPR", "name": "Lapse rate", "unit": "K m-1"},
+          "9": {"shortName": "TMPA", "name": "Temperature anomaly", "unit": "K"},
+          "10": {"shortName": "LHTFL", "name": "Latent heat net flux", "unit": "W m-2"},
+          "11": {"shortName": "SHTFL", "name": "Sensible heat net flux", "unit": "W m-2"},
+          "12": {"shortName": "HEATX", "name": "Heat index", "unit": "K"},
+          "13": {"shortName": "WCHIL", "name": "Wind chill factor", "unit": "K"},
+          "14": {"shortName": "MNTSF", "name": "Minimum temperature at specified level", "unit": "K"},
+          "15": {"shortName": "MXTSF", "name": "Maximum temperature at specified level", "unit": "K"},
+          "16": {"shortName": "SOILT", "name": "Soil Temperature", "unit": "K"},
+          "17": {"shortName": "SKINT", "name": "Skin temperature", "unit": "K"}
+        }
+      },
+      "1": {
+        "name": "Moisture",
+        "parameters": {
+          "0": {"shortName": "SPFH", "name": "Specific humidity", "unit": "kg kg-1"},
+          "1": {"shortName": "RH", "name": "Relative humidity", "unit": "%"},
+          "2": {"shortName": "MIXR", "name": "Humidity mixing ratio", "unit": "kg kg-1"},
+          "3": {"shortName": "PWAT", "name": "Precipitable water", "unit": "kg m-2"},
+          "4": {"shortName": "VAPP", "name": "Vapour pressure", "unit": "Pa"},
+          "5": {"shortName": "SATD", "name": "Saturation deficit", "unit": "Pa"},
+          "6": {"shortName": "EVAP", "name": "Evaporation", "unit": "kg m-2"},
+          "7": {"shortName": "PRATE", "name": "Precipitation rate", "unit": "kg m-2 s-1"},
+          "8": {"shortName": "APCP", "name": "Total precipitation", "unit": "kg m-2"},
+          "9": {"shortName": "NCPCP", "name": "Large-scale precipitation", "unit": "kg m-2"},
+          "10": {"shortName": "ACPCP", "name": "Convective precipitation", "unit": "kg m-2"},
+          "11": {"shortName": "SNOD", "name": "Snow depth", "unit": "m"},
+          "12": {"shortName": "SRWEQ", "name": "Snowfall rate water equivalent", "unit": "kg m-2 s-1"},
+          "13": {"shortName": "TSNOW", "name": "Total snowfall", "unit": "m"},
+          "14": {"shortName": "CPOFP", "name": "Convective precipitation fraction", "unit": "Proportion"},
+          "15": {"shortName": "FROZR", "name": "Frozen rain", "unit": "kg m-2"},
+          "16": {"shortName": "PEVPR", "name": "Potential evaporation rate", "unit": "W m-2"},
+          "17": {"shortName": "PEVAP", "name": "Potential evaporation", "unit": "kg m-2"},
+          "19": {"shortName": "SNOWC", "name": "Snow cover", "unit": "%"},
+          "22": {"shortName": "CLWMR", "name": "Cloud mixing ratio", "unit": "kg kg-1"},
+          "23": {"shortName": "ICMR", "name": "Ice water mixing ratio", "unit": "kg kg-1"},
+          "24": {"shortName": "RWMR", "name": "Rain mixing ratio", "unit": "kg kg-1"},
+          "25": {"shortName": "SNMR", "name": "Snow mixing ratio", "unit": "kg kg-1"},
+          "31": {"shortName": "SNOM", "name": "Snow melt", "unit": "kg m-2"},
+          "52": {"shortName": "TCW", "name": "Total column-integrated water vapour", "unit": "kg m-2"},
+          "61": {"shortName": "TCIW", "name": "Total column-integrated cloud water", "unit": "kg m-2"},
+          "71": {"shortName": "TCDC", "name": "Total Cloud Cover", "unit": "%"}
+        }
+      },
+      "2": {
+        "name": "Momentum",
+        "parameters": {
+          "0": {"shortName": "WDIR", "name": "Wind direction (from which blowing)", "unit": "deg true"},
+          "1": {"shortName": "WIND", "name": "Wind speed", "unit": "m s-1"},
+          "2": {"shortName": "UGRD", "name": "U-component of wind", "unit": "m s-1"},
+          "3": {"shortName": "VGRD", "name": "V-component of wind", "unit": "m s-1"},
+          "4": {"shortName": "STRM", "name": "Stream function", "unit": "m2 s-1"},
+          "5": {"shortName": "VPOT", "name": "Velocity potential", "unit": "m2 s-1"},
+          "6": {"shortName": "MNTSF", "name": "Montgomery stream function", "unit": "m2 s-2"},
+          "8": {"shortName": "VVEL", "name": "Vertical velocity (pressure)", "unit": "Pa s-1"},
+          "9": {"shortName": "DZDT", "name": "Vertical velocity (geometric)", "unit": "m s-1"},
+          "10": {"shortName": "ABSV", "name": "Absolute vorticity", "unit": "s-1"},
+          "11": {"shortName": "ABSD", "name": "Absolute divergence", "unit": "s-1"},
+          "12": {"shortName": "PVORT", "name": "Potential vorticity", "unit": "K m2 kg-1 s-1"},
+          "13": {"shortName": "VUCSH", "name": "Vertical U-component shear", "unit": "s-1"},
+          "14": {"shortName": "VVCSH", "name": "Vertical V-component shear", "unit": "s-1"},
+          "17": {"shortName": "MAXGUST", "name": "Maximum wind speed (gust)", "unit": "m s-1"},
+          "22": {"shortName": "GUST", "name": "Wind speed (gust)", "unit": "m s-1"}
+        }
+      },
+      "3": {
+        "name": "Mass",
+        "parameters": {
+          "0": {"shortName": "PRES", "name": "Pressure", "unit": "Pa"},
+          "1": {"shortName": "PRMSL", "name": "Pressure reduced to mean sea level", "unit": "Pa"},
+          "2": {"shortName": "PTEND", "name": "Pressure tendency", "unit": "Pa s-1"},
+          "4": {"shortName": "5WAVH", "name": "5-wave geopotential height", "unit": "gpm"},
+          "5": {"shortName": "HGT", "name": "Geopotential height", "unit": "gpm"},
+          "6": {"shortName": "DIST", "name": "Geometrical height", "unit": "m"},
+          "7": {"shortName": "HSTD", "name": "Standard deviation of height", "unit": "m"},
+          "8": {"shortName": "HVAR", "name": "Variance of height", "unit": "m2"}
+        }
+      },
+      "6": {
+        "name": "Cloud",
+        "parameters": {
+          "1": {"shortName": "TCDC", "name": "Total cloud cover", "unit": "%"},
+          "2": {"shortName": "CDCON", "name": "Convective cloud cover", "unit": "%"},
+          "3": {"shortName": "LCDC", "name": "Low cloud cover", "unit": "%"},
+          "4": {"shortName": "MCDC", "name": "Medium cloud cover", "unit": "%"},
+          "5": {"shortName": "HCDC", "name": "High cloud cover", "unit": "%"},
+          "6": {"shortName": "CWAT", "name": "Cloud water", "unit": "kg m-2"},
+          "7": {"shortName": "CDCB", "name": "Cloud base", "unit": "m"},
+          "8": {"shortName": "CDCT", "name": "Cloud top", "unit": "m"}
+        }
+      },
+      "7": {
+          "name": "Thermodynamic Stability",
+          "parameters": {
+              "6": {"shortName": "CAPE", "name": "Convective available potential energy", "unit": "J kg-1"},
+              "7": {"shortName": "CIN", "name": "Convective inhibition", "unit": "J kg-1"}
+          }
+      },
+      "19": {
+        "name": "Physical atmospheric properties",
+        "parameters": {
+          "0": {"shortName": "VIS", "name": "Visibility", "unit": "m"},
+          "2": {"shortName": "HPBL", "name": "Planetary Boundary Layer Height", "unit": "m"}
+        }
+      }
+    }
+  },
+  "10": {
+      "name": "Oceanographic products",
+      "categories": {
+          "2": {
+              "name": "Ice",
+              "parameters": {
+                  "0": {"shortName": "ICEC", "name": "Ice cover", "unit": "Proportion"},
+                  "1": {"shortName": "ICETK", "name": "Ice thickness", "unit": "m"}
+              }
+          }
+      }
+  }
+}

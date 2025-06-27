@@ -1,0 +1,72 @@
+/* Basic styles for a clean, modern look */
+body, html {
+    overflow: hidden;
+    height: 100%;
+    width: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #333; /* Dark background for the page */
+}
+/* Style for the map placeholder */
+#map-placeholder {
+    background-color: #aadaff;
+    color: #5e839e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: bold;
+}
+/* Custom styles for control panels */
+.control-panel {
+    background-color: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease-in-out;
+}
+.control-panel button, .control-panel select {
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+.control-panel button.active, .control-panel select.active {
+    background-color: #3b82f6; /* blue-500 */
+    color: white;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+}
+/* Custom slider track */
+input[type=range]::-webkit-slider-runnable-track {
+    height: 6px;
+    background: #d1d5db; /* gray-300 */
+    border-radius: 3px;
+}
+input[type=range]::-moz-range-track {
+    height: 6px;
+    background: #d1d5db; /* gray-300 */
+    border-radius: 3px;
+}
+/* Custom slider thumb */
+input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -5px;
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    background: #3b82f6; /* blue-500 */
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 0 5px rgba(0,0,0,0.2);
+}
+ input[type=range]::-moz-range-thumb {
+    height: 16px;
+    width: 16px;
+    border-radius: 50%;
+    background: #3b82f6; /* blue-500 */
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 0 5px rgba(0,0,0,0.2);
+}
+/* Styles for modals */
+.modal.visible {
+    display: flex;
+}

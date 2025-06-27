@@ -6,6 +6,54 @@ The core of the project is a C wrapper around `NCEPLIBS-g2c` and its dependencie
 
 To exercise the capabilities of the WASM module, this repository includes example applications.
 
+---
+
+## Project Components
+
+* **`g2c-wasm` (WASM Module Project)**: A C project that wraps the `NCEPLIBS-g2c` library and its dependencies (`libaec`, `openjpeg`), which are included as Git submodules.
+* **Build Environment**: A `Dockerfile` creates a consistent, Ubuntu-based build environment with all necessary tools (CMake, Ninja, Emscripten SDK) to compile the WebAssembly module.
+* **Windows Development Scripts**: A collection of batch scripts (`.bat`) is provided to manage a portable Windows development environment, including local setup for Git and a Node.js web server.
+* **Experimental Site (`/work/newsite`)**: A work-in-progress application demonstrating a more advanced, map-based interface for GFS data.
+
+## Setup and Usage
+
+### Prerequisites
+* **Docker**: Required for building the WebAssembly module.
+* **Web Browser**: For running the example applications.
+
+### Building the WebAssembly Module
+
+The WASM module is built inside a Docker container to ensure a consistent environment. The final artifacts (`g2clib.js`, `g2clib.wasm`) are placed in the `/work/jsgrib` directory.
+
+1.  **Build the Docker Image**:
+    This command builds the Docker image named `g2clib-wasm-builder`.
+    ```shell
+    # On Windows
+    build-image.bat
+
+    # On Linux/macOS
+    ./build-image.sh
+    ```
+
+2.  **Start an Interactive Session**:
+    This command starts a `bash` shell inside the container and mounts the local `work/` directory to `/app` in the container.
+    ```shell
+    # On Windows
+    run-interactive.bat
+
+    # On Linux/macOS
+    ./run-interactive.sh
+    ```
+
+3.  **Run the Build Script (Inside Docker)**:
+    Inside the container's `bash` prompt, run the build script. It compiles all dependencies and then the main library.
+    ```bash
+    cd /app/g2c-wasm
+    ./build.sh
+    ```
+
+---
+
 ## Example Applications
 
 ### 1. GFS Data Explorer (`/work/app`)
@@ -37,53 +85,8 @@ A client side tool for display of live GFS data in a user-friendly map view load
 
 This one is only in the very early prototype stage.
 
----
 
-## Project Components
-
-* **`g2c-wasm` (WASM Module Project)**: A C project that wraps the `NCEPLIBS-g2c` library and its dependencies (`libaec`, `openjpeg`), which are included as Git submodules.
-* **Build Environment**: A `Dockerfile` creates a consistent, Ubuntu-based build environment with all necessary tools (CMake, Ninja, Emscripten SDK) to compile the WebAssembly module.
-* **Windows Development Scripts**: A collection of batch scripts (`.bat`) is provided to manage a portable Windows development environment, including local setup for Git and a Node.js web server.
-* **Experimental Site (`/work/newsite`)**: A work-in-progress application demonstrating a more advanced, map-based interface for GFS data.
-
-## Setup and Usage
-
-### Prerequisites
-* **Docker**: Required for building the WebAssembly module.
-* **Web Browser**: For running the example applications.
-
-### 1. Building the WebAssembly Module
-
-The WASM module is built inside a Docker container to ensure a consistent environment. The final artifacts (`g2clib.js`, `g2clib.wasm`) are placed in the `/work/jsgrib` directory.
-
-1.  **Build the Docker Image**:
-    This command builds the Docker image named `g2clib-wasm-builder`.
-    ```shell
-    # On Windows
-    build-image.bat
-
-    # On Linux/macOS
-    ./build-image.sh
-    ```
-
-2.  **Start an Interactive Session**:
-    This command starts a `bash` shell inside the container and mounts the local `work/` directory to `/app` in the container.
-    ```shell
-    # On Windows
-    run-interactive.bat
-
-    # On Linux/macOS
-    ./run-interactive.sh
-    ```
-
-3.  **Run the Build Script (Inside Docker)**:
-    Inside the container's `bash` prompt, run the build script. It compiles all dependencies and then the main library.
-    ```bash
-    cd /app/g2c-wasm
-    ./build.sh
-    ```
-
-### 2. Running the Example Applications
+### Running the Example Applications
 
 The applications are served by a local web server.
 
@@ -101,6 +104,17 @@ The applications are served by a local web server.
     * **GFS Data Explorer**: `http://localhost:8080/app/`
     * **GRIB2 Inspector**: `http://localhost:8080/jsgrib/`
     * **GFS Live (Experimental)**: `http://localhost:8080/newsite/`
+
+## Boring (or interesting?) details
+
+Dependencies:
+
+- libz and libpng are included via EMSCRIPTEN precompiled libraries
+- jasper is excluded from this initial integration
+- openjpeg is included as a git submodule and compiled from unmodified source code
+- libaec is included as a git submodule and compiled from unmodified source code
+- g2c included as a git submodule and compiled from unmodified source code
+
 
 ## Data Citation
 Data used with the GFS Data Explorer is sourced from the NOAA Global Forecast System (GFS), accessed from the AWS Open Data Registry.

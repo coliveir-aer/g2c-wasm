@@ -1,0 +1,13 @@
+# Ignore all build artifact directories
+build/
+install/
+
+g2clib.wasm
+g2clib.js
+
+# Ignore downloaded tools
+/tools/
+/node_modules/
+
+# Ignore context dump
+project_context_git*

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GFS Data Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="style.css" rel="stylesheet">
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-S1GZVR1HPX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      
+      gtag('config', 'G-S1GZVR1HPX');
+    </script>
+</head>
+<body class="text-gray-800">
+
+    <div class="container mx-auto p-4 lg:p-6 max-w-full">
+        <header class="mb-6 pb-4 border-b border-gray-300">
+            <h1 class="text-3xl font-bold text-gray-800">GFS Data Explorer</h1>
+            
+            <p class="text-gray-600 mt-1">Discover, filter, and download GFS data from the NOAA Open Data Dissemination program on AWS S3.</p>
+        </header>
+
+        <div id="main-container" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <aside class="lg:col-span-3 bg-white p-6 rounded-xl shadow-md space-y-6">
+                <h2 class="text-xl font-semibold border-b pb-3">Filter Criteria</h2>
+                
+                <div>
+                    <label for="date-selector" class="block text-sm font-medium text-gray-700 mb-1">Date (UTC)</label>
+                    <input type="date" id="date-selector" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+
+                <div>
+                    <label for="cycle-selector" class="block text-sm font-medium text-gray-700 mb-1">Cycle Run Time (UTC)</label>
+                    <select id="cycle-selector" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="00">00Z</option>
+                        <option value="06">06Z</option>
+                        <option value="12" selected>12Z</option>
+                        <option value="18">18Z</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="product-selector" class="block text-sm font-medium text-gray-700 mb-1">Product Category</label>
+                    <select id="product-selector" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="pgrb2.0p25">GFS 0.25 deg (Core Params, pgrb2)</option>
+                        <option value="pgrb2.0p50">GFS 0.50 deg (Core Params, pgrb2)</option>
+                        <option value="pgrb2.1p00" selected>GFS 1.00 deg (Core Params, pgrb2)</option>
+                        <option value="pgrb2b.0p25">GFS 0.25 deg (Extended Params, pgrb2b)</option>
+                        <option value="pgrb2full.0p50">GFS 0.50 deg (Full Params, pgrb2full)</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="forecast-hour-selector" class="block text-sm font-medium text-gray-700 mb-1">Forecast Hour(s)</label>
+                    <input type="text" id="forecast-hour-selector" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" value="0-12">
+                    <p class="text-xs text-gray-500 mt-1">Enter comma-separated values, ranges (e.g., 6-18), or leave blank for all. Valid values are 0 through 384.</p>
+                    <p class="text-xs text-gray-500 mt-1">0.25 deg forecasts are run hourly from hour 0 through hour 120, then every 3 hours until hour 384.</p>
+                    <p class="text-xs text-gray-500 mt-1">0.5 deg and 1.0 deg forecasts are run for every 3 hours from hour 0 until hour 384.</p>
+                </div>
+
+                <button id="query-button" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg>
+                    Query GFS Data
+                </button>
+
+                <div class="copy-tools-bubble">
+                    <h3>Copy Tools</h3>
+                    
+                    <div class="py-2 mb-4 border-b border-gray-200 flex flex-col gap-2">
+                        <button id="copyQueryPythonBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm w-full">Copy Query as Python Code</button>
+                        <button id="downloadPythonBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm w-full">Python Code to Download Selected</button>
+                    </div>
+
+                    <div id="copyLinksPanel" class="hidden">
+                        <h4>Copy Object Key</h4>
+                        <p class="text-sm text-gray-600 mb-4">Click a button below to copy the selected file's link.</p>
+                        <div class="copy-link-group">
+                            <button id="copyHttpsLinkBtn" class="bg-indigo-600 hover:bg-indigo-700">Copy HTTPS Link</button>
+                            <button id="copyS3LinkBtn" class="bg-indigo-600 hover:bg-indigo-700">Copy S3 URI</button>
+                        </div>
+                    </div>
+
+                    <div id="jsonOutputPanel" class="hidden">
+                        <h4>Selected Files JSON</h4>
+                        <div>
+                            <textarea id="jsonDisplayArea" readonly></textarea>
+                            <button id="copyJsonBtn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-md shadow-sm">Copy JSON to Clipboard</button>
+                        </div>
+                    </div>
+                </div>
+                </aside>
+
+            <main id="results-column" class="lg:col-span-9 bg-white p-6 rounded-xl shadow-md flex flex-col">
+                <div class="mb-4">
+                     <label for="s3-path-display" class="block text-sm font-medium text-gray-700 mb-1">Generated S3 Path</label>
+                     <input id="s3-path-display" type="text" class="w-full p-2 bg-gray-100 border border-gray-300 rounded-md text-xs" readonly>
+                </div>
+
+                <div class="flex items-center justify-between border-b pb-3 mb-4">
+                     <h2 class="text-xl font-semibold">Results</h2>
+                     <div id="loader" class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-8 w-8 hidden"></div>
+                </div>
+
+                <div id="results-actions" class="flex flex-wrap items-center gap-4 mb-4 hidden">
+                    <div class="flex items-center">
+                        <input id="select-all-checkbox" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                        <label for="select-all-checkbox" class="ml-2 block text-sm text-gray-900">Select All</label>
+                    </div>
+
+                    <div class="filter-options-group">
+                        <input type="text" id="file-filter-input" placeholder="Filter filenames..." class="p-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                        <div class="filter-mode-radios">
+                            <input type="radio" id="filter-include" name="filter-mode" value="include" checked class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                            <label for="filter-include" class="text-sm text-gray-700">Include</label>
+                            <input type="radio" id="filter-exclude" name="filter-mode" value="exclude" class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                            <label for="filter-exclude" class="text-sm text-gray-700">Exclude</label>
+                        </div>
+                    </div>
+                    <button id="download-button" class="bg-green-600 text-white font-semibold py-2 px-4 rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                        Download Selected (<span id="selected-count">0</span>)
+                    </button>
+                    <p id="results-summary" class="text-sm text-gray-600 ml-auto"></p>
+                </div>
+
+                <div id="results-container" class="flex-grow overflow-y-auto pr-2 -mr-2 min-h-[300px]">
+                    <table id="results-table" class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filename</th>
+                                <th class="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">F-Hour</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body" class="bg-white divide-y divide-gray-200">
+                            </tbody>
+                    </table>
+                    <div id="message-area" class="text-center py-10 text-gray-500">
+                        Please select criteria and click "Query GFS Data" to begin.
+                    </div>
+                </div>
+                 <div class="mt-6 pt-4 border-t border-gray-200 bg-blue-50 p-4 rounded-lg">
+                    <h3 class="text-md font-semibold text-blue-800">Working with GRIB2 Data</h3>
+                    <p class="text-sm text-blue-700 mt-1">
+                        Downloaded files are in GRIB2 format. This is a standard for meteorological data but requires specialized software for viewing and analysis.
+                        Consider using tools like 
+                        <a href="https://metview.readthedocs.io/en/latest/" target="_blank" class="font-medium underline">Metview</a>, 
+                        or Python libraries like <a href="https://github.com/blaylockbk/Herbie" target="_blank" class="font-medium underline">Herbie</a> for programmatic access.
+                    </p>
+                </div>
+            </main>
+            
+            <aside id="inventory-column" class="lg:col-span-4 bg-white p-6 rounded-xl shadow-md flex-col hidden" data-grib-file-key="">
+                <div class="flex justify-between items-center mb-3 border-b pb-3">
+                    <h2 class="text-xl font-semibold">GRIB Inventory</h2>
+                    <button id="close-inventory-btn" class="text-gray-500 hover:text-gray-800 text-2xl font-bold">&times;</button>
+                </div>
+
+                <div class="space-y-3">
+                    <input type="text" id="inventory-filter-input" placeholder="Filter products..." class="w-full p-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    
+                    <div class="grid grid-cols-3 gap-2">
+                        <button id="download-subset-btn" class="col-span-2 w-full bg-green-600 text-white font-semibold py-2 px-3 rounded-md shadow-sm hover:bg-green-700 text-sm">Download GRIB Subset</button>
+                        <button id="clear-all-btn" class="w-full bg-gray-400 text-white font-semibold py-2 px-3 rounded-md shadow-sm hover:bg-gray-500 text-sm">Clear All</button>
+                    </div>
+                </div>
+
+                <div id="inventory-list-container" class="flex-grow overflow-y-auto pr-2 -mr-2 mt-4">
+                     </div>
+            </aside>
+
+        </div>
+        
+        <footer class="mt-8 pt-6 border-t border-gray-300 text-center text-sm text-gray-500">
+            <p class="mb-2">
+                This is an open source project. Find the code on 
+                <a href="https://github.com/coliveir-aer/gfs-data-explorer" target="_blank" class="text-indigo-600 hover:underline">GitHub</a>.
+            </p>
+            <p class="mt-2">
+                Data Citation: NOAA Global Forecast System (GFS) was accessed from the
+                <a href="https://registry.opendata.aws/noaa-gfs-bdp-pds" target="_blank" class="text-indigo-600 hover:underline">AWS Open Data Registry</a>.
+            </p>
+            <p class="mt-2">
+                <a href="https://coliveir-aer.github.io/jpss-data-explorer" target="_blank" class="text-indigo-600 hover:underline">JPSS Data Explorer Site</a> |
+                <a href="https://coliveir-aer.github.io/himawari-data-explorer" target="_blank" class="text-indigo-600 hover:underline">Himawari Data Explorer Site</a> |
+                <a href="https://coliveir-aer.github.io/goes-data-explorer" target="_blank" class="text-indigo-600 hover:underline">GOES Data Explorer Site</a>
+            </p>
+        </footer>
+    </div>
+    <script type="module" src="main.js"></script>
+</body>
+</html>

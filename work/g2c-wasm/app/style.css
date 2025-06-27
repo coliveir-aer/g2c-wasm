@@ -1,0 +1,136 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f3f4f6;
+}
+/* Custom scrollbar for results */
+#results-container::-webkit-scrollbar {
+    width: 8px;
+}
+#results-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+#results-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+#results-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+.loader {
+    border-top-color: #3498db;
+    -webkit-animation: spin 1s linear infinite;
+    animation: spin 1s linear infinite;
+}
+@-webkit-keyframes spin {
+    0% { -webkit-transform: rotate(0deg); }
+    100% { -webkit-transform: rotate(360deg); }
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Styles for JSON and copy link panels */
+.copy-link-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap; /* Allow buttons to wrap if space is too narrow */
+    justify-content: flex-start; /* Align buttons to the start */
+}
+.copy-link-group button {
+    background-color: #10b981; /* Green for copy */
+    color: white;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+    white-space: nowrap; /* Prevent text wrapping */
+}
+.copy-link-group button:hover {
+    background-color: #059669;
+}
+
+#jsonDisplayArea {
+        width: 100%;
+        height: 80px; /* Reduced height for compactness */
+        padding: 12px;
+        margin-bottom: 12px;
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+        font-size: 0.9rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background-color: white;
+        resize: vertical; /* Allow vertical resize only */
+}
+.message-box {
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 16px;
+    transition: opacity 0.3s ease-in-out;
+    text-align: center; /* Center the message text */
+    margin-left: auto; /* Center the box itself */
+    margin-right: auto; /* Center the box itself */
+    max-width: fit-content; /* Adjust width to content */
+}
+
+/* Styles for the copy link and JSON panels */
+#copyLinksPanel, #jsonOutputPanel {
+    background-color: #eff6ff; /* Light blue background */
+    border: 1px solid #bfdbfe; /* Blue border */
+    border-radius: 8px;
+    padding: 12px 16px; /* Consistent padding */
+    margin-top: 16px; /* Space between sections */
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+#copyLinksPanel h4, #jsonOutputPanel h4 {
+    font-weight: 600;
+    color: #1e40af; /* Darker blue for titles */
+    margin-bottom: 10px; /* Space below title */
+}
+
+/* Style for the copy tools bubble */
+.copy-tools-bubble {
+    background-color: #ffffff; /* White background for the bubble */
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05); /* Lighter shadow for nested bubble */
+    padding: 16px;
+    margin-top: 24px; /* Space from filter section */
+    border: 1px solid #e2e8f0; /* Light border */
+}
+.copy-tools-bubble h3 {
+    font-size: 1.125rem; /* text-lg */
+    font-weight: 600; /* font-semibold */
+    color: #334155; /* text-gray-700 */
+    margin-bottom: 1rem; /* mb-4 */
+    padding-bottom: 0.75rem; /* pb-3 */
+    border-bottom: 1px solid #e2e8f0; /* border-b */
+}
+
+/* Styles for the left filter/tools panel (aside) to enable sticky scrolling */
+aside {
+    position: sticky;
+    top: 20px; /* Aligns with body top padding */
+    max-height: calc(100vh - 40px); /* 100vh minus 20px top and 20px bottom body padding */
+    overflow-y: auto; /* Enable internal scrolling for the aside content */
+}
+
+/* Specific styles for the filter input to prevent wrapping with radio buttons */
+#file-filter-input {
+    width: 180px; /* Fixed width or max-width to control size */
+}
+.filter-options-group {
+        display: flex;
+        align-items: center;
+        gap: 8px; /* Space between filter input and radio buttons */
+        flex-wrap: wrap; /* Allow wrapping if space is extremely tight */
+}
+.filter-mode-radios {
+    display: flex;
+    align-items: center;
+    gap: 12px; /* Space between radio button pairs */
+}
+.filter-mode-radios label {
+    white-space: nowrap; /* Prevent "Include" and "Exclude" labels from wrapping */
+}

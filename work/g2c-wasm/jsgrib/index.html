@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRIB2 Inspector</title>
+    <link href="style.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <h1>GRIB2 File Inspector</h1>
+        <p>Drag and drop a .grib2, .grb2, or .bin file onto the area below.</p>
+        <div id="drop-zone">
+            <p>Initializing GRIB processor...</p>
+        </div>
+        <div id="results-area">
+            <h2 id="file-info"></h2>
+            <div id="results-container"></div>
+        </div>
+    </div>
+
+    <div id="plot-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <div id="plot-container"></div>
+        </div>
+    </div>
+
+    <script>
+        // Define the Module object with configuration BEFORE g2clib.js is loaded.
+        var Module = {
+            onRuntimeInitialized: () => {
+                console.log('HTML: WASM runtime is ready. Dispatching event.');
+                // Dispatch a custom event to signal that the WASM module is ready.
+                const event = new CustomEvent('wasmReady');
+                window.dispatchEvent(event);
+            },
+            locateFile: (path, prefix) => {
+                console.log(`HTML: locateFile triggered. path: "${path}", prefix: "${prefix}"`);
+                return path.endsWith('.wasm') ? 'g2clib.wasm' : path;
+            }
+        };
+    </script>
+    
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script src="g2clib.js"></script> 
+    <script type="module" src="main.js"></script>
+</body>
+</html>

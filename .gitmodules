@@ -1,0 +1,9 @@
+[submodule "work/g2c-wasm/source/g2c"]
+	path = work/g2c-wasm/source/g2c
+	url = https://github.com/NOAA-EMC/NCEPLIBS-g2c.git
+[submodule "work/g2c-wasm/source/openjpeg"]
+	path = work/g2c-wasm/source/openjpeg
+	url = https://github.com/uclouvain/openjpeg.git
+[submodule "work/g2c-wasm/source/libaec"]
+	path = work/g2c-wasm/source/libaec
+	url = https://github.com/coliveir-aer/libaec.git

@@ -104,3 +104,6 @@ The applications are served by a local web server.
 
 ## Data Citation
 Data used with the GFS Data Explorer is sourced from the NOAA Global Forecast System (GFS), accessed from the AWS Open Data Registry.
+
+## LICENSE
+The software license for this project is the LGPLV3 in compliance with the g2clib project, since it relies fully on the g2clib other than the GFS Data Explorer example, which is under the MIT LICENSE.

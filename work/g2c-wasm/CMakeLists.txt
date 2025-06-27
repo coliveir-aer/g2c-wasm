@@ -6,11 +6,9 @@ project(g2clib-wasm C)
 set(GENERATED_HEADER_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated_headers)
 
 add_compile_definitions(_LARGEFILE64_SOURCE)
-
 set(G2_AEC_ENABLED ON)
 set(G2_JPEG2000_ENABLED ON)
 set(G2_PNG_ENABLED ON)
-add_compile_definitions(_LARGEFILE64_SOURCE)
 set(PNG_WIDTH_MAX 100000000 CACHE STRING "Default width of PNG grid.")
 set(PNG_HEIGHT_MAX 100000 CACHE STRING "Default height of PNG grid.")
 

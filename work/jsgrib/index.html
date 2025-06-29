@@ -4,45 +4,60 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GRIB2 Inspector</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet for map rendering -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Custom Styles -->
     <link href="style.css" rel="stylesheet">
 </head>
-<body>
-    <div class="container">
-        <h1>GRIB2 File Inspector</h1>
-        <p>Drag and drop a .grib2, .grb2, or .bin file onto the area below.</p>
-        <div id="drop-zone">
-            <p>Initializing GRIB processor...</p>
+<body class="bg-gray-100 text-gray-800 font-sans">
+
+    <div class="container mx-auto p-4 lg:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">GRIB2 Inspector</h1>
+            <p class="text-lg text-gray-600 mt-2">A client-side tool to inspect and visualize local GRIB2 files using WebAssembly.</p>
+        </header>
+
+        <div id="drop-zone" class="flex flex-col items-center justify-center p-10 border-4 border-dashed border-gray-300 rounded-2xl text-gray-500 transition-all duration-300">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <p class="text-xl font-semibold">Drag & Drop a GRIB2 file here</p>
+            <p class="mt-1 text-sm">or click to select a file</p>
+            <input type="file" id="file-input" class="hidden" accept=".grib2,.grb2,.bin">
         </div>
-        <div id="results-area">
-            <h2 id="file-info"></h2>
-            <div id="results-container"></div>
+
+        <div id="results-area" class="mt-8 bg-white p-6 rounded-2xl shadow-lg hidden">
+            <h2 id="file-info" class="text-2xl font-bold mb-4 pb-4 border-b border-gray-200"></h2>
+            <div id="results-container" class="overflow-x-auto">
+                <!-- Message table will be rendered here by main.js -->
+            </div>
         </div>
     </div>
 
-    <div id="plot-modal" class="modal">
+    <!-- Modal for displaying the map overlay -->
+    <div id="map-modal" class="modal">
         <div class="modal-content">
-            <span class="close-button">&times;</span>
-            <div id="plot-container"></div>
+            <div class="modal-header">
+                <h3 id="modal-title" class="text-xl font-bold">Data Visualization</h3>
+                <span class="close-button">&times;</span>
+            </div>
+            <div id="map-container"></div>
         </div>
     </div>
 
+    <!-- Emscripten/WASM Loader Scripts -->
     <script>
-        // Define the Module object with configuration BEFORE g2clib.js is loaded.
         var Module = {
             onRuntimeInitialized: () => {
-                console.log('HTML: WASM runtime is ready. Dispatching event.');
-                // Dispatch a custom event to signal that the WASM module is ready.
-                const event = new CustomEvent('wasmReady');
-                window.dispatchEvent(event);
+                console.log('WASM runtime is ready.');
+                window.dispatchEvent(new CustomEvent('wasmReady'));
             },
-            locateFile: (path, prefix) => {
-                console.log(`HTML: locateFile triggered. path: "${path}", prefix: "${prefix}"`);
-                return path.endsWith('.wasm') ? 'g2clib.wasm' : path;
-            }
+            locateFile: (path) => path.endsWith('.wasm') ? 'g2clib.wasm' : path,
         };
     </script>
-    
-    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
     <script src="g2clib.js"></script> 
     <script type="module" src="main.js"></script>
 </body>

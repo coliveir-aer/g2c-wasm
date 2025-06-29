@@ -1,98 +1,59 @@
-// work/jsgrib/ui.js
+// /work/jsgrib/ui.js
 import { getProduct } from './grib2-lookup.js';
 
-// --- Plotting Logic ---
-function showPlot(message) {
-    const modal = document.getElementById('plot-modal');
-    const plotContainer = document.getElementById('plot-container');
-    const closeButton = modal.querySelector('.close-button');
-
-    const product = getProduct(message.discipline, message.parameterCategory, message.parameterNumber);
-    const title = `${product.name} (${product.shortName})`;
-    const units = product.unit;
-
-    // Reshape the 1D data array into a 2D grid for plotting
-    const zData = [];
-    if (message.grid_nx > 0 && message.grid_ny > 0) {
-        for (let i = 0; i < message.grid_ny; i++) {
-            zData.push(message.data.slice(i * message.grid_nx, (i + 1) * message.grid_nx));
-        }
-    }
-
-    const plotData = [{
-        z: zData,
-        type: 'heatmap',
-        colorscale: 'Viridis',
-        colorbar: {
-            title: units,
-            titleside: 'right'
-        }
-    }];
-
-    const layout = {
-        title: title,
-        xaxis: { title: 'Longitude Index' },
-        yaxis: { title: 'Latitude Index', autorange: 'reversed' } // GRIB data is often top-to-bottom
-    };
-
-    Plotly.newPlot(plotContainer, plotData, layout);
-
-    modal.style.display = 'block';
-
-    closeButton.onclick = () => {
-        modal.style.display = 'none';
-        Plotly.purge(plotContainer); // Clear the plot to free memory
-    };
-
-    window.onclick = (event) => {
-        if (event.target == modal) {
-            modal.style.display = 'none';
-            Plotly.purge(plotContainer);
-        }
-    };
-}
-
-
+/**
+ * Renders the table of decoded GRIB messages.
+ * @param {Array<object>} messages - An array of the fully decoded message objects.
+ * @param {HTMLElement} container - The HTML element to render the table into.
+ */
 export function renderMessagesTable(messages, container) {
     container.innerHTML = ''; // Clear previous results
 
     if (!messages || messages.length === 0) {
-        container.innerHTML = '<p>No GRIB messages could be decoded from the file.</p>';
+        container.innerHTML = '<p class="text-center text-gray-500 py-4">No GRIB messages could be decoded from the file.</p>';
         return;
     }
 
     const table = document.createElement('table');
+    table.className = 'min-w-full divide-y divide-gray-200';
     const thead = document.createElement('thead');
+    thead.className = 'bg-gray-50';
     const tbody = document.createElement('tbody');
+    tbody.className = 'bg-white divide-y divide-gray-200';
 
-    // Create table headers with new columns
-    const headers = ['Msg #', 'Short Name', 'Full Name', 'Unit', 'Grid Template', 'Grid Dimensions', 'Actions'];
+    // Create table headers
+    const headers = ['Msg #', 'Short Name', 'Full Name', 'Level', 'Grid Dimensions', 'Actions'];
     const headerRow = document.createElement('tr');
     headers.forEach(text => {
         const th = document.createElement('th');
+        th.scope = 'col';
+        th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
         th.textContent = text;
         headerRow.appendChild(th);
     });
     thead.appendChild(headerRow);
 
-    // Create table rows from the new metadata structure
-    messages.forEach((metadata, index) => {
+    // Create table rows for each message
+    messages.forEach((decodedData, index) => {
         const row = document.createElement('tr');
+        row.className = 'hover:bg-gray-50';
 
-        // Use the lookup function with the corrected parameter fields
-        const product = getProduct(metadata.discipline, metadata.parameterCategory, metadata.parameterNumber);
-        
-        const gridTemplate = metadata.grid_template !== undefined ? metadata.grid_template : 'N/A';
-        const gridDimensions = (metadata.grid_nx && metadata.grid_ny && metadata.grid_nx > 0) ? `${metadata.grid_nx} x ${metadata.grid_ny}` : `${metadata.grid_num_points}`;
+        const { metadata } = decodedData;
+        // CORRECTED: Access the product definition through the 'sections' object
+        const product = getProduct(metadata.info.discipline, metadata.sections.product_definition.data[0], metadata.sections.product_definition.data[1]);
+        const gridDimensions = `${metadata.grid.nx} x ${metadata.grid.ny}`;
+        // CORRECTED: Access the level from the correct path
+        const level = metadata.sections.product_definition.data[4]; 
 
         row.innerHTML = `
-            <td>${metadata.messageNumber}</td>
-            <td>${product.shortName}</td>
-            <td>${product.name}</td>
-            <td>${product.unit}</td>
-            <td>${gridTemplate}</td>
-            <td>${gridDimensions}</td>
-            <td><button class="view-btn" data-index="${index}">View Image</button></td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${decodedData.messageNumber}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.shortName}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.name}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${level}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${gridDimensions}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <button class="view-btn text-indigo-600 hover:text-indigo-900" data-index="${index}">View Map</button>
+            </td>
         `;
         tbody.appendChild(row);
     });
@@ -100,12 +61,4 @@ export function renderMessagesTable(messages, container) {
     table.appendChild(thead);
     table.appendChild(tbody);
     container.appendChild(table);
-
-    // Add event listeners for the new "View" buttons
-    container.querySelectorAll('.view-btn').forEach(button => {
-        button.addEventListener('click', (e) => {
-            const messageIndex = parseInt(e.target.dataset.index, 10);
-            showPlot(messages[messageIndex]);
-        });
-    });
 }

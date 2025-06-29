@@ -1,7 +1,11 @@
 let grib2Tables = null;
 
+/**
+ * Loads the GRIB2 parameter definition tables from a JSON file.
+ */
 export async function loadTables() {
-    if (grib2Tables) return; // Don't load more than once
+    // Don't load more than once.
+    if (grib2Tables) return; 
     
     try {
         const response = await fetch('./grib2-tables.json');
@@ -16,8 +20,16 @@ export async function loadTables() {
     }
 }
 
+/**
+ * Looks up the human-readable name and unit for a GRIB2 parameter.
+ * @param {number} discipline - GRIB message discipline code.
+ * @param {number} category - Parameter category code.
+ * @param {number} number - Parameter number code.
+ * @returns {{shortName: string, name: string, unit: string}}
+ */
 export function getProduct(discipline, category, number) {
     try {
+        // Navigate through the nested JSON structure to find the parameter details.
         const d = grib2Tables[discipline];
         const c = d.categories[category];
         const p = c.parameters[number];
@@ -27,6 +39,7 @@ export function getProduct(discipline, category, number) {
             unit: p.unit || ''
         };
     } catch (e) {
+        // Return a default object if any part of the lookup fails.
         return {
             shortName: 'N/A',
             name: 'Unknown Parameter',

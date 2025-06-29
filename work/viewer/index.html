@@ -19,16 +19,31 @@
 
     <!-- UI CONTROLS -->
     <div id="top-bar" class="leaflet-control">
-        <!-- Product selection dropdown will be added here by main.js -->
         <select id="product-selector"></select>
-        <!-- Level selection buttons will be added here by main.js -->
         <div id="level-selector"></div>
+        
+        <!-- Experimental rendering controls -->
+        <div id="debug-controls">
+            <fieldset>
+                <legend>Debug Controls</legend>
+                <label><input type="checkbox" id="remap-lon-checkbox" checked> Remap Lon</label>
+                <label><input type="checkbox" id="flip-x-checkbox"> Flip Horizontal</label>
+                <label><input type="checkbox" id="flip-y-checkbox"> Flip Vertical</label>
+                <div>
+                    <label for="scale-slider">Scale: <span id="scale-value">1.0</span></label>
+                    <input type="range" id="scale-slider" min="0.5" max="1.5" step="0.01" value="1.0">
+                </div>
+                <div>
+                    <label for="lon-shift-slider">Lon Shift: <span id="lon-shift-value">0</span>°</label>
+                    <input type="range" id="lon-shift-slider" min="-180" max="180" step="1" value="0">
+                </div>
+            </fieldset>
+        </div>
     </div>
 
     <div id="bottom-bar" class="leaflet-control">
-        <!-- Forecast timeline slider will be added here by main.js -->
         <div id="timeline-controls">
-            <label for="timeline-slider">Forecast Hour: <span id="forecast-hour-display">+0h</span></label>
+            <label for="timeline-slider">Forecast Time: <span id="forecast-hour-display">+0h</span></label>
             <input type="range" min="0" max="72" step="3" value="0" id="timeline-slider">
         </div>
         <div id="run-info">
@@ -48,7 +63,7 @@
     </script>
     <script src="g2clib.js"></script>
     
-    <!-- Main Application Logic (to be created next) -->
+    <!-- Main Application Logic -->
     <script src="main.js" type="module"></script>
 </body>
 </html>

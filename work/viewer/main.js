@@ -4,43 +4,44 @@
 const S3_BUCKET_URL = 'https://noaa-gfs-bdp-pds.s3.amazonaws.com/';
 
 // The GFS product type to be used. 'pgrb2.0p25' is 0.25 degree, 'pgrb2.1p00' is 1.00 degree.
-// We use 1.00 degree for now for faster testing and loading.
 const GFS_PRODUCT_TYPE = 'pgrb2.1p00'; 
 
 // Definition of the weather products we want to make available.
-// This structure can be easily expanded with more products or levels.
 const AVAILABLE_PRODUCTS = {
     'temp_2m': {
         name: '2m Temperature',
         product: 'TMP',
         level: '2 m above ground',
-        // Simple color scale for temperature in Kelvin.
-        // This can be replaced with a more sophisticated gradient library later.
         colorScale: (value) => { 
-            if (value < 250) return [0, 0, 139]; // Dark Blue
-            if (value < 260) return [0, 0, 255]; // Blue
-            if (value < 270) return [0, 255, 255]; // Cyan
-            if (value < 280) return [0, 255, 0]; // Green
-            if (value < 290) return [255, 255, 0]; // Yellow
-            if (value < 300) return [255, 165, 0]; // Orange
-            if (value < 310) return [255, 0, 0]; // Red
-            return [139, 0, 0]; // Dark Red
+            if (value < 250) return [0, 0, 139];
+            if (value < 260) return [0, 0, 255];
+            if (value < 270) return [0, 255, 255];
+            if (value < 280) return [0, 255, 0];
+            if (value < 290) return [255, 255, 0];
+            if (value < 300) return [255, 165, 0];
+            if (value < 310) return [255, 0, 0];
+            return [139, 0, 0];
         }
     },
-    // Future products like wind, precipitation, etc., can be added here.
 };
 
 
 // --- APPLICATION STATE ---
-
-// Holds the current state of the viewer (selected time, product, etc.)
 const appState = {
-    gfsRun: { date: null, cycle: -1 }, // Date object (UTC) and cycle hour (0, 6, 12, 18)
-    selectedTimestamp: 0,              // The currently selected time on the slider (Unix timestamp)
-    selectedProduct: 'temp_2m',        // Key from AVAILABLE_PRODUCTS
-    map: null,                         // Leaflet map object
-    dataOverlay: null,                 // Leaflet overlay layer for the weather data
-    isFetching: false,                 // A flag to prevent concurrent data fetches
+    gfsRun: { date: null, cycle: -1 },
+    selectedTimestamp: 0,
+    selectedProduct: 'temp_2m',
+    map: null,
+    dataOverlay: null,
+    isFetching: false,
+    // Experimental rendering options controlled by the debug UI
+    renderingOptions: {
+        remapLongitude: true,
+        flipX: false,
+        flipY: false,
+        scale: 1.0,
+        lonShift: 0
+    }
 };
 
 
@@ -48,10 +49,17 @@ const appState = {
 const domElements = {
     map: document.getElementById('map'),
     productSelector: document.getElementById('product-selector'),
-    // levelSelector: document.getElementById('level-selector'), // Placeholder for future use
     timelineSlider: document.getElementById('timeline-slider'),
     forecastHourDisplay: document.getElementById('forecast-hour-display'),
     runInfo: document.getElementById('run-info'),
+    // Debug Controls
+    remapLonCheckbox: document.getElementById('remap-lon-checkbox'),
+    flipXCheckbox: document.getElementById('flip-x-checkbox'),
+    flipYCheckbox: document.getElementById('flip-y-checkbox'),
+    scaleSlider: document.getElementById('scale-slider'),
+    scaleValue: document.getElementById('scale-value'),
+    lonShiftSlider: document.getElementById('lon-shift-slider'),
+    lonShiftValue: document.getElementById('lon-shift-value'),
 };
 
 
@@ -59,26 +67,25 @@ const domElements = {
 
 /**
  * Initializes the entire application.
- * This function is called once the WASM module is ready.
  */
 async function initializeApp() {
     console.log('Initializing application...');
     domElements.runInfo.textContent = 'Finding latest GFS model run...';
 
-    // 1. Initialize the Leaflet map.
-    // Use the EPSG4326 projection, which is a simple cylindrical projection
-    // that maps latitude and longitude directly, avoiding Mercator distortion.
+    // Initialize Leaflet map with the correct projection
     appState.map = L.map(domElements.map, {
         crs: L.CRS.EPSG4326,
         worldCopyJump: true
-    }).setView([40, -95], 3); 
+    }).setView([20, 0], 2); 
     
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    // Use a WMS tile layer from NASA GIBS that serves tiles in the correct EPSG:4326 projection.
+    L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi', {
+        layers: 'BlueMarble_ShadedRelief_Bathymetry',
+        format: 'image/jpeg',
+        transparent: true,
+        attribution: 'NASA GIBS'
     }).addTo(appState.map);
 
-    // 2. Find the latest available GFS run
     const latestRun = await findLatestGfsRun();
     if (!latestRun) {
         domElements.runInfo.textContent = 'Error: Could not find any recent GFS model runs.';
@@ -87,56 +94,36 @@ async function initializeApp() {
     appState.gfsRun = latestRun;
     console.log(`Latest GFS run found: ${latestRun.date.toISOString().slice(0, 10)} ${latestRun.cycle}Z`);
 
-    // 3. Populate UI controls
     populateProductSelector();
     setupTimeSlider();
-
-    // 4. Add event listeners
     setupEventListeners();
-
-    // 5. Fetch and display data for the initial time
     fetchAndDisplayData();
 }
 
 /**
- * Probes the NOAA S3 bucket to find the most recent GFS model run directory.
- * This function is robust against timezone issues and network requests by iterating
- * day by day, not hour by hour.
- * @returns {Promise<{date: Date, cycle: number}|null>} The date and cycle of the latest run.
+ * Probes the NOAA S3 bucket to find the most recent GFS model run.
  */
 async function findLatestGfsRun() {
-    // Start search from 6 hours in the future to ensure we catch the latest UTC date.
     let currentDate = new Date(Date.now() + 6 * 60 * 60 * 1000);
-
-    // Look back up to 3 days to find a valid run.
     for (let i = 0; i < 3; i++) {
         const dateStr = currentDate.toISOString().slice(0, 10).replace(/-/g, '');
-        
-        // Check cycles in reverse chronological order (18Z, 12Z, 6Z, 0Z) for efficiency.
         for (const cycle of [18, 12, 6, 0]) {
             const cycleStr = cycle.toString().padStart(2, '0');
             const testUrl = `${S3_BUCKET_URL}gfs.${dateStr}/${cycleStr}/atmos/gfs.t${cycleStr}z.${GFS_PRODUCT_TYPE}.f000.idx`;
             console.log(`Checking for run: ${testUrl}`);
-            
             try {
-                // Use a ranged GET request to check for file existence, which is CORS-friendly.
                 const response = await fetch(testUrl, { method: 'GET', headers: { 'Range': 'bytes=0-0' } });
-                // A 206 "Partial Content" status confirms the file exists and the server supports ranged requests.
                 if (response.status === 206) {
-                    // Success! We found a run. Return the UTC date and cycle.
                     const runDate = new Date(Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth(), currentDate.getUTCDate()));
                     return { date: runDate, cycle: cycle };
                 }
             } catch (e) {
-                // Ignore fetch errors (e.g., network issue, CORS) and continue to the next candidate.
                 console.warn(`Request for ${testUrl} failed, likely does not exist.`, e);
             }
         }
-        // If no run was found for the current day, go back one day.
         currentDate.setUTCDate(currentDate.getUTCDate() - 1);
     }
-    
-    return null; // No run found after searching.
+    return null;
 }
 
 /**
@@ -198,17 +185,10 @@ async function fetchAndDisplayData() {
 
 /**
  * Searches the GRIB index file text for a specific product and level.
- * @param {string} indexText - The plain text content of the .idx file.
- * @param {object} productInfo - An object from AVAILABLE_PRODUCTS.
- * @returns {{start: number, end: string}|null} The byte range of the message.
  */
 function findMessageInIndex(indexText, productInfo) {
     const lines = indexText.split('\n');
-    const startBytes = lines.map(line => {
-        const fields = line.split(':');
-        return fields.length > 1 ? parseInt(fields[1], 10) : null;
-    });
-
+    const startBytes = lines.map(line => parseInt(line.split(':')[1], 10));
     const targetLineIndex = lines.findIndex(line => {
         const fields = line.split(':');
         return fields.length > 4 && fields[3] === productInfo.product && fields[4] === productInfo.level;
@@ -217,9 +197,9 @@ function findMessageInIndex(indexText, productInfo) {
     if (targetLineIndex === -1) return null;
 
     const startByte = startBytes[targetLineIndex];
-    let endByte = ''; // Open-ended for the last message
+    let endByte = '';
     for (let i = targetLineIndex + 1; i < startBytes.length; i++) {
-        if (startBytes[i] !== null) {
+        if (!isNaN(startBytes[i])) {
             endByte = String(startBytes[i] - 1);
             break;
         }
@@ -229,39 +209,28 @@ function findMessageInIndex(indexText, productInfo) {
 
 /**
  * Uses the WASM module to decode a GRIB message buffer.
- * @param {ArrayBuffer} gribMessageBuffer - The buffer for a single GRIB message.
- * @returns {object|null} The decoded data including metadata and values, or null on failure.
  */
 function processGribData(gribMessageBuffer) {
     const dataPtr = Module._malloc(gribMessageBuffer.byteLength);
-    if (dataPtr === 0) {
-        console.error("WASM _malloc failed to allocate memory.");
+    if (!dataPtr) {
+        console.error("WASM _malloc failed.");
         return null;
     }
-    
     try {
         Module.HEAPU8.set(new Uint8Array(gribMessageBuffer), dataPtr);
         const resultPtr = Module.ccall('process_grib_field', 'number', ['number', 'number', 'number'], [dataPtr, gribMessageBuffer.byteLength, 1]);
-
-        if (resultPtr === 0) {
+        if (!resultPtr) {
             console.error("C function 'process_grib_field' returned a NULL pointer.");
             return null;
         }
-
         const metadataJsonPtr = Module.getValue(resultPtr, '*');
-        const metadataJsonLen = Module.getValue(resultPtr + 4, 'i32');
-        const dataArrayPtr = Module.getValue(resultPtr + 8, '*');
+        const metadataLen = Module.getValue(resultPtr + 4, 'i32');
+        const dataPtr_ = Module.getValue(resultPtr + 8, '*');
         const numPoints = Module.getValue(resultPtr + 16, 'i32');
-
-        const metadata = JSON.parse(Module.UTF8ToString(metadataJsonPtr, metadataJsonLen));
-        const values = new Float32Array(Module.HEAPU8.buffer, dataArrayPtr, numPoints).slice();
-        
+        const metadata = JSON.parse(Module.UTF8ToString(metadataJsonPtr, metadataLen));
+        const values = new Float32Array(Module.HEAPU8.buffer, dataPtr_, numPoints).slice();
         Module.ccall('free_result_memory', null, ['number'], [resultPtr]);
         return { metadata, values };
-
-    } catch (e) {
-        console.error("Error during WASM processing:", e);
-        return null;
     } finally {
         Module._free(dataPtr);
     }
@@ -272,25 +241,23 @@ function processGribData(gribMessageBuffer) {
 
 function populateProductSelector() {
     domElements.productSelector.innerHTML = '';
-    for (const key in AVAILABLE_PRODUCTS) {
+    Object.keys(AVAILABLE_PRODUCTS).forEach(key => {
         const option = document.createElement('option');
         option.value = key;
         option.textContent = AVAILABLE_PRODUCTS[key].name;
         domElements.productSelector.appendChild(option);
-    }
+    });
     domElements.productSelector.value = appState.selectedProduct;
 }
 
 function setupTimeSlider() {
     const startTime = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
-    const endTime = startTime + (72 * 60 * 60 * 1000); // 3 days
-    const step = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
-
+    const endTime = startTime + (72 * 60 * 60 * 1000);
+    const step = 3 * 60 * 60 * 1000;
     domElements.timelineSlider.min = startTime;
     domElements.timelineSlider.max = endTime;
     domElements.timelineSlider.step = step;
     domElements.timelineSlider.value = startTime;
-    
     appState.selectedTimestamp = startTime;
     updateTimeDisplay();
 }
@@ -301,20 +268,40 @@ function updateTimeDisplay() {
 }
 
 function setupEventListeners() {
+    // Main UI Listeners
     domElements.timelineSlider.addEventListener('input', () => {
         appState.selectedTimestamp = parseInt(domElements.timelineSlider.value);
         updateTimeDisplay();
     });
-
-    domElements.timelineSlider.addEventListener('change', () => {
-        appState.selectedTimestamp = parseInt(domElements.timelineSlider.value);
-        fetchAndDisplayData();
-    });
-
+    domElements.timelineSlider.addEventListener('change', () => fetchAndDisplayData());
     domElements.productSelector.addEventListener('change', (e) => {
         appState.selectedProduct = e.target.value;
         fetchAndDisplayData();
     });
+
+    // Debug UI Listeners
+    domElements.remapLonCheckbox.addEventListener('change', (e) => {
+        appState.renderingOptions.remapLongitude = e.target.checked;
+        fetchAndDisplayData();
+    });
+    domElements.flipXCheckbox.addEventListener('change', (e) => {
+        appState.renderingOptions.flipX = e.target.checked;
+        fetchAndDisplayData();
+    });
+    domElements.flipYCheckbox.addEventListener('change', (e) => {
+        appState.renderingOptions.flipY = e.target.checked;
+        fetchAndDisplayData();
+    });
+    domElements.scaleSlider.addEventListener('input', (e) => {
+        appState.renderingOptions.scale = parseFloat(e.target.value);
+        domElements.scaleValue.textContent = appState.renderingOptions.scale.toFixed(2);
+    });
+    domElements.scaleSlider.addEventListener('change', () => fetchAndDisplayData());
+    domElements.lonShiftSlider.addEventListener('input', (e) => {
+        appState.renderingOptions.lonShift = parseInt(e.target.value);
+        domElements.lonShiftValue.textContent = `${appState.renderingOptions.lonShift}°`;
+    });
+    domElements.lonShiftSlider.addEventListener('change', () => fetchAndDisplayData());
 }
 
 /**
@@ -326,65 +313,90 @@ async function renderDataOnMap(decodedData) {
     const { metadata, values } = decodedData;
     const { nx, ny } = metadata.grid;
 
-    if (!nx || !ny || nx <= 0 || ny <= 0) {
+    if (!nx || !ny) {
         console.error("Invalid grid dimensions:", metadata.grid);
         return;
     }
 
-    const canvas = document.createElement('canvas');
-    canvas.width = nx;
-    canvas.height = ny;
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.createImageData(nx, ny);
-
+    const displayCanvas = document.createElement('canvas');
+    displayCanvas.width = nx;
+    displayCanvas.height = ny;
+    const displayCtx = displayCanvas.getContext('2d');
+    
+    // Create a temporary, off-screen canvas to hold the raw pixel data.
+    const bufferCanvas = document.createElement('canvas');
+    bufferCanvas.width = nx;
+    bufferCanvas.height = ny;
+    const bufferCtx = bufferCanvas.getContext('2d');
+    
+    const imageData = bufferCtx.createImageData(nx, ny);
     const productConfig = AVAILABLE_PRODUCTS[appState.selectedProduct];
     const colorScale = productConfig.colorScale;
 
-    // The GFS data has longitude from 0 to 359. We need to remap this to -180 to 180
-    // for Leaflet. We'll "cut" the data at the 180-degree meridian.
-    const halfWidth = nx / 2;
-    const remappedValues = new Float32Array(values.length);
-
-    for (let j = 0; j < ny; j++) {
-        for (let i = 0; i < nx; i++) {
-            const oldIndex = j * nx + i;
-            let newI;
-
-            // Pixels from 180 to 359 degrees (the right half of the GFS grid)
-            // will become the left half of our new map (-180 to 0).
-            if (i >= halfWidth) {
-                newI = i - halfWidth;
-            } 
-            // Pixels from 0 to 179 degrees (the left half of the GFS grid)
-            // will become the right half of our new map (0 to 180).
-            else {
-                newI = i + halfWidth;
-            }
-            const newIndex = j * nx + newI;
-            remappedValues[newIndex] = values[oldIndex];
-        }
-    }
+    let processedValues = values;
+    let bounds;
     
-    // Draw the remapped data to the canvas.
-    for (let i = 0; i < remappedValues.length; i++) {
-        const color = colorScale(remappedValues[i]);
+    // Conditionally remap the longitude based on the debug checkbox
+    if (appState.renderingOptions.remapLongitude) {
+        const halfWidth = nx / 2;
+        const remapped = new Float32Array(values.length);
+        for (let j = 0; j < ny; j++) {
+            for (let i = 0; i < nx; i++) {
+                const oldIndex = j * nx + i;
+                let newI = (i < halfWidth) ? i + halfWidth : i - halfWidth;
+                remapped[j * nx + newI] = values[oldIndex];
+            }
+        }
+        processedValues = remapped;
+        bounds = [[-90, -180], [90, 180]];
+    } else {
+        bounds = [[metadata.grid.lat_last, metadata.grid.lon_first], [metadata.grid.lat_first, metadata.grid.lon_last]];
+    }
+
+    // Draw the processed data to the buffer canvas's image buffer.
+    for (let i = 0; i < processedValues.length; i++) {
+        const color = colorScale(processedValues[i]);
         const pixelIndex = i * 4;
         imageData.data[pixelIndex] = color[0];     // R
         imageData.data[pixelIndex + 1] = color[1]; // G
         imageData.data[pixelIndex + 2] = color[2]; // B
-        imageData.data[pixelIndex + 3] = 150;      // Alpha (semi-transparent)
+        imageData.data[pixelIndex + 3] = 150;      // Alpha
     }
-    ctx.putImageData(imageData, 0, 0);
+    bufferCtx.putImageData(imageData, 0, 0);
 
-    // Now that the data is correctly ordered, we can use standard global bounds.
-    const bounds = [[-90, -180], [90, 180]];
-    const imageUrl = canvas.toDataURL();
+    // Apply debug transformations before drawing the buffer to the display canvas.
+    displayCtx.save();
+    const scaleX = appState.renderingOptions.flipX ? -1 : 1;
+    const scaleY = appState.renderingOptions.flipY ? -1 : 1;
+    const transX = appState.renderingOptions.flipX ? -nx : 0;
+    const transY = appState.renderingOptions.flipY ? -ny : 0;
+    displayCtx.translate(transX, transY);
+    displayCtx.scale(scaleX, scaleY);
+    
+    // Draw the (potentially transformed) buffer canvas to the display canvas.
+    displayCtx.drawImage(bufferCanvas, 0, 0);
+    displayCtx.restore();
+
+    // Apply debug scale and shift to the final bounds
+    const scale = appState.renderingOptions.scale;
+    const lonShift = appState.renderingOptions.lonShift;
+    const centerLat = (bounds[0][0] + bounds[1][0]) / 2;
+    const centerLon = (bounds[0][1] + bounds[1][1]) / 2;
+    const height = Math.abs(bounds[1][0] - bounds[0][0]) * scale;
+    const width = Math.abs(bounds[1][1] - bounds[0][1]) * scale;
+
+    const finalBounds = [
+        [centerLat - height/2, centerLon - width/2 + lonShift],
+        [centerLat + height/2, centerLon + width/2 + lonShift]
+    ];
+    
+    const imageUrl = displayCanvas.toDataURL();
 
     if (appState.dataOverlay) {
         appState.map.removeLayer(appState.dataOverlay);
     }
     
-    appState.dataOverlay = L.imageOverlay(imageUrl, bounds, {
+    appState.dataOverlay = L.imageOverlay(imageUrl, finalBounds, {
         opacity: 0.7,
         interactive: false
     }).addTo(appState.map);

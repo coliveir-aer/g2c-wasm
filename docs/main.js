@@ -4,7 +4,7 @@
 const S3_BUCKET_URL = 'https://noaa-gfs-bdp-pds.s3.amazonaws.com/';
 
 // The GFS product type to be used. 'pgrb2.0p25' is 0.25 degree, 'pgrb2.1p00' is 1.00 degree.
-const GFS_PRODUCT_TYPE = 'pgrb2.0p25'; 
+const GFS_PRODUCT_TYPE = 'pgrb2.0p50'; 
 
 // Definition of the weather products we want to make available.
 const AVAILABLE_PRODUCTS = {

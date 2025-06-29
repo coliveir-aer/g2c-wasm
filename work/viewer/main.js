@@ -12,6 +12,8 @@ const AVAILABLE_PRODUCTS = {
         name: '2m Temperature',
         product: 'TMP',
         level: '2 m above ground',
+        minForecastHour: 0,
+        // This color scale now returns only [R, G, B] values.
         colorScale: (value) => { 
             if (value < 250) return [0, 0, 139];
             if (value < 260) return [0, 0, 255];
@@ -23,6 +25,24 @@ const AVAILABLE_PRODUCTS = {
             return [139, 0, 0];
         }
     },
+    'precip_total': {
+        name: 'Total Precipitation',
+        product: 'APCP',
+        level: 'surface',
+        minForecastHour: 3, // APCP is an accumulated product, not available at hour 0.
+        // This color scale also returns only [R, G, B].
+        // It returns null for zero precipitation, which is handled in the render function.
+        colorScale: (value) => {
+            if (value <= 0.1) return null; // No significant rain
+            if (value < 1)    return [144, 238, 144]; // Very light green
+            if (value < 2.5)  return [0, 255, 0];     // Light green
+            if (value < 5)    return [0, 200, 0];     // Green
+            if (value < 10)   return [255, 255, 0];   // Yellow
+            if (value < 25)   return [255, 165, 0];   // Orange
+            if (value < 50)   return [255, 0, 0];     // Red
+            return [180, 0, 0];                     // Dark Red
+        }
+    }
 };
 
 
@@ -89,11 +109,14 @@ async function initializeApp() {
  */
 async function findLatestGfsRun() {
     let currentDate = new Date(Date.now() + 6 * 60 * 60 * 1000);
+    // Check for a file at hour 168 to have high confidence the run is complete for a 7-day forecast.
+    const checkHour = 'f168';
+
     for (let i = 0; i < 3; i++) {
         const dateStr = currentDate.toISOString().slice(0, 10).replace(/-/g, '');
         for (const cycle of [18, 12, 6, 0]) {
             const cycleStr = cycle.toString().padStart(2, '0');
-            const testUrl = `${S3_BUCKET_URL}gfs.${dateStr}/${cycleStr}/atmos/gfs.t${cycleStr}z.${GFS_PRODUCT_TYPE}.f000.idx`;
+            const testUrl = `${S3_BUCKET_URL}gfs.${dateStr}/${cycleStr}/atmos/gfs.t${cycleStr}z.${GFS_PRODUCT_TYPE}.${checkHour}.idx`;
             console.log(`Checking for run: ${testUrl}`);
             try {
                 const response = await fetch(testUrl, { method: 'GET', headers: { 'Range': 'bytes=0-0' } });
@@ -123,8 +146,14 @@ async function fetchAndDisplayData() {
 
     try {
         const runTimestamp = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
-        const forecastHour = Math.round((appState.selectedTimestamp - runTimestamp) / (60 * 60 * 1000));
         
+        let forecastHour = Math.round((appState.selectedTimestamp - runTimestamp) / (60 * 60 * 1000));
+        
+        // For the 0.25 deg product, snap to the nearest valid forecast hour.
+        if (GFS_PRODUCT_TYPE !== 'pgrb2.0p25' || forecastHour > 120) {
+            forecastHour = Math.round(forecastHour / 3) * 3;
+        }
+
         const dateStr = appState.gfsRun.date.toISOString().slice(0, 10).replace(/-/g, '');
         const cycleStr = appState.gfsRun.cycle.toString().padStart(2, '0');
         const hourStr = forecastHour.toString().padStart(3, '0');
@@ -224,6 +253,7 @@ function processGribData(gribMessageBuffer) {
 // --- UI AND MAP RENDERING ---
 
 function populateProductSelector() {
+    const currentSelection = domElements.productSelector.value || appState.selectedProduct;
     domElements.productSelector.innerHTML = '';
     Object.keys(AVAILABLE_PRODUCTS).forEach(key => {
         const option = document.createElement('option');
@@ -231,13 +261,15 @@ function populateProductSelector() {
         option.textContent = AVAILABLE_PRODUCTS[key].name;
         domElements.productSelector.appendChild(option);
     });
-    domElements.productSelector.value = appState.selectedProduct;
+    domElements.productSelector.value = currentSelection;
 }
 
 function setupTimeSlider() {
     const startTime = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
-    const endTime = startTime + (72 * 60 * 60 * 1000);
-    const step = 3 * 60 * 60 * 1000;
+    // Extend forecast range to 168 hours (7 days)
+    const endTime = startTime + (168 * 60 * 60 * 1000);
+    // The step is now 1 hour to support the 0.25deg hourly data.
+    const step = 1 * 60 * 60 * 1000;
     domElements.timelineSlider.min = startTime;
     domElements.timelineSlider.max = endTime;
     domElements.timelineSlider.step = step;
@@ -260,13 +292,24 @@ function setupEventListeners() {
     domElements.timelineSlider.addEventListener('change', () => fetchAndDisplayData());
     domElements.productSelector.addEventListener('change', (e) => {
         appState.selectedProduct = e.target.value;
+        
+        const productInfo = AVAILABLE_PRODUCTS[appState.selectedProduct];
+        const runTimestamp = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
+        const currentForecastHour = Math.round((appState.selectedTimestamp - runTimestamp) / (60 * 60 * 1000));
+
+        if (currentForecastHour < productInfo.minForecastHour) {
+            const newTimestamp = runTimestamp + (productInfo.minForecastHour * 60 * 60 * 1000);
+            appState.selectedTimestamp = newTimestamp;
+            domElements.timelineSlider.value = newTimestamp;
+            updateTimeDisplay();
+        }
+        
         fetchAndDisplayData();
     });
 }
 
 /**
  * Renders the decoded weather data onto a canvas and overlays it on the map.
- * This function now remaps the data grid to match Leaflet's coordinate system.
  * @param {{metadata: object, values: Float32Array}} decodedData - The data from the WASM module.
  */
 async function renderDataOnMap(decodedData) {
@@ -287,9 +330,7 @@ async function renderDataOnMap(decodedData) {
     const productConfig = AVAILABLE_PRODUCTS[appState.selectedProduct];
     const colorScale = productConfig.colorScale;
 
-    // The GFS data has longitude from 0 to 359. We remap this to -180 to 180
-    // for Leaflet by "cutting" the data at the 180-degree meridian.
-    const halfWidth = nx / 2;
+    const halfWidth = Math.round(nx / 2);
     const remapped = new Float32Array(values.length);
     for (let j = 0; j < ny; j++) {
         for (let i = 0; i < nx; i++) {
@@ -299,18 +340,21 @@ async function renderDataOnMap(decodedData) {
         }
     }
     
-    // Draw the remapped data to the canvas.
     for (let i = 0; i < remapped.length; i++) {
         const color = colorScale(remapped[i]);
         const pixelIndex = i * 4;
-        imageData.data[pixelIndex] = color[0];     // R
-        imageData.data[pixelIndex + 1] = color[1]; // G
-        imageData.data[pixelIndex + 2] = color[2]; // B
-        imageData.data[pixelIndex + 3] = 150;      // Alpha
+        
+        if (color) {
+            imageData.data[pixelIndex] = color[0];
+            imageData.data[pixelIndex + 1] = color[1];
+            imageData.data[pixelIndex + 2] = color[2];
+            imageData.data[pixelIndex + 3] = 200;
+        } else {
+            imageData.data[pixelIndex + 3] = 0;
+        }
     }
     ctx.putImageData(imageData, 0, 0);
     
-    // The data is now correctly ordered for a standard global map.
     const bounds = [[-90, -180], [90, 180]];
     const imageUrl = canvas.toDataURL();
 

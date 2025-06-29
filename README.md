@@ -4,8 +4,6 @@ This project demonstrates a WebAssembly (WASM) wrapper for the [NOAA NCEPLIBS-g2
 
 The core of the project is a C wrapper around `NCEPLIBS-g2c` and its dependencies, compiled to WebAssembly using Emscripten. This allows web applications to perform data extraction without needing a server-side backend.
 
-To exercise the capabilities of the WASM module, this repository includes example applications.
-
 An example deployment of the GFS Live demo site is up at: [https://coliveir-aer.github.io/g2c-wasm/](https://coliveir-aer.github.io/g2c-wasm/)
 
 ---
@@ -15,7 +13,7 @@ An example deployment of the GFS Live demo site is up at: [https://coliveir-aer.
 * **`g2c-wasm` (WASM Module Project)**: A C project that wraps the `NCEPLIBS-g2c` library and its dependencies (`libaec`, `openjpeg`), which are included as Git submodules.
 * **Build Environment**: A `Dockerfile` creates a consistent, Ubuntu-based build environment with all necessary tools (CMake, Ninja, Emscripten SDK) to compile the WebAssembly module.
 * **Windows Development Scripts**: A collection of batch scripts (`.bat`) is provided to manage a portable Windows development environment, including local setup for Git and a Node.js web server.
-* **Experimental Site (`/work/newsite`)**: A work-in-progress application demonstrating a more advanced, map-based interface for GFS data.
+* **Application Examples**: A collection of applications that demonstrate the capabilities of the WASM module and provide development tools.
 
 ## Setup and Usage
 
@@ -25,7 +23,7 @@ An example deployment of the GFS Live demo site is up at: [https://coliveir-aer.
 
 ### Building the WebAssembly Module
 
-The WASM module is built inside a Docker container to ensure a consistent environment. The final artifacts (`g2clib.js`, `g2clib.wasm`) are placed in the `/work/jsgrib` directory.
+The WASM module is built inside a Docker container to ensure a consistent environment. The final artifacts (`g2clib.js`, `g2clib.wasm`) are placed in the relevant application directories within `/work`.
 
 1.  **Build the Docker Image**:
     This command builds the Docker image named `g2clib-wasm-builder`.
@@ -58,35 +56,35 @@ The WASM module is built inside a Docker container to ensure a consistent enviro
 
 ## Example Applications
 
-### 1. GFS Data Explorer (`/work/app`)
+### 1. GFS Live Weather Viewer (`/work/viewer`)
 
-A utility for querying, filtering, and downloading data from the NOAA Global Forecast System (GFS) collection on the AWS Open Data Registry.
-
-This utility site does not use the webassembly module (yet), it just provides a means of gathering data to display.
+This is the primary demonstration application. It is a modern, map-centric weather viewer that fetches and renders GFS model data directly from the NOAA S3 bucket in the browser.
 
 * **Features**:
-    * Query GFS data by date, cycle run time, and product resolution.
-    * Filter results by specific forecast hours or hour ranges.
-    * Inspect the message inventory of individual GRIB2 files before downloading.
-    * Download full GRIB files or create and download partial files containing only selected messages.
-    * Generate Python code snippets for programmatic S3 queries.
+    * Automatically finds and loads data from the latest available GFS model run.
+    * Displays weather data as an overlay on a Leaflet map.
+    * Features an intuitive timeline slider for selecting different forecast times.
+    * Currently supports 2m Temperature and Total Precipitation products.
+    * Engineered to be lightweight and performant by only fetching the required byte ranges for each GRIB message.
+    * Still a very early prototype of what it could become.
 
 ### 2. GRIB2 Inspector (`/work/jsgrib`)
 
-A client-side tool for loading and visualizing local GRIB2 files. This application directly uses the compiled `g2clib.wasm` module to process user-provided files.
+A client-side utility for inspecting the contents of local GRIB2 files. This application directly uses the compiled `g2clib.wasm` module to process user-provided files via drag-and-drop.
 
 * **Features**:
-    * Load local GRIB2 files via drag-and-drop.
-    * List all messages contained within a GRIB2 file.
-    * Display metadata for each message, including parameter, units, and grid dimensions.
-    * Generate and display a heatmap visualization of the data for any selected message.
+    * Load local GRIB2 files.
+    * Lists all messages contained within a file.
+    * Displays key metadata for each message.
+    * Generates a heatmap visualization of the data for any selected message.
 
-### 3. GFS Live (Experimental)
+### 3. WASM Test Harness (`/work/test-site`)
 
-A client side tool for display of live GFS data in a user-friendly map view loading only the necessary ranges of bytes from the product files stored on S3.
+A lightweight developer tool for verifying the integrity of the WebAssembly module. It runs a suite of regression tests against a known GRIB file to ensure the C code and JSON output are correct after any modifications.
 
-This one is only in the very early prototype stage.
+### 4. GFS Data Explorer (`/work/app`)
 
+A utility for querying and filtering the full GFS data collection on AWS S3. This tool is useful for discovering available data and generating download scripts, but it does not use the WebAssembly module.
 
 ### Running the Example Applications
 
@@ -103,9 +101,10 @@ The applications are served by a local web server.
     ```
 
 2.  **Access the Applications**:
-    * **GFS Data Explorer**: `http://localhost:8080/app/`
+    * **GFS Live Weather Viewer**: `http://localhost:8080/viewer/`
     * **GRIB2 Inspector**: `http://localhost:8080/jsgrib/`
-    * **GFS Live (Experimental)**: `http://localhost:8080/newsite/`
+    * **WASM Test Harness**: `http://localhost:8080/test-site/`
+    * **GFS Data Explorer**: `http://localhost:8080/app/`
 
 ## Boring (or interesting?) details
 

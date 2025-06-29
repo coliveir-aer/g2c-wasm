@@ -4,7 +4,7 @@
 const S3_BUCKET_URL = 'https://noaa-gfs-bdp-pds.s3.amazonaws.com/';
 
 // The GFS product type to be used. 'pgrb2.0p25' is 0.25 degree, 'pgrb2.1p00' is 1.00 degree.
-const GFS_PRODUCT_TYPE = 'pgrb2.1p00'; 
+const GFS_PRODUCT_TYPE = 'pgrb2.0p25'; 
 
 // Definition of the weather products we want to make available.
 const AVAILABLE_PRODUCTS = {
@@ -34,14 +34,6 @@ const appState = {
     map: null,
     dataOverlay: null,
     isFetching: false,
-    // Experimental rendering options controlled by the debug UI
-    renderingOptions: {
-        remapLongitude: true,
-        flipX: false,
-        flipY: false,
-        scale: 1.0,
-        lonShift: 0
-    }
 };
 
 
@@ -52,14 +44,6 @@ const domElements = {
     timelineSlider: document.getElementById('timeline-slider'),
     forecastHourDisplay: document.getElementById('forecast-hour-display'),
     runInfo: document.getElementById('run-info'),
-    // Debug Controls
-    remapLonCheckbox: document.getElementById('remap-lon-checkbox'),
-    flipXCheckbox: document.getElementById('flip-x-checkbox'),
-    flipYCheckbox: document.getElementById('flip-y-checkbox'),
-    scaleSlider: document.getElementById('scale-slider'),
-    scaleValue: document.getElementById('scale-value'),
-    lonShiftSlider: document.getElementById('lon-shift-slider'),
-    lonShiftValue: document.getElementById('lon-shift-value'),
 };
 
 
@@ -80,7 +64,7 @@ async function initializeApp() {
     
     // Use a WMS tile layer from NASA GIBS that serves tiles in the correct EPSG:4326 projection.
     L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi', {
-        layers: 'BlueMarble_ShadedRelief_Bathymetry',
+        layers: 'OSM_Land_Water_Map',
         format: 'image/jpeg',
         transparent: true,
         attribution: 'NASA GIBS'
@@ -278,30 +262,6 @@ function setupEventListeners() {
         appState.selectedProduct = e.target.value;
         fetchAndDisplayData();
     });
-
-    // Debug UI Listeners
-    domElements.remapLonCheckbox.addEventListener('change', (e) => {
-        appState.renderingOptions.remapLongitude = e.target.checked;
-        fetchAndDisplayData();
-    });
-    domElements.flipXCheckbox.addEventListener('change', (e) => {
-        appState.renderingOptions.flipX = e.target.checked;
-        fetchAndDisplayData();
-    });
-    domElements.flipYCheckbox.addEventListener('change', (e) => {
-        appState.renderingOptions.flipY = e.target.checked;
-        fetchAndDisplayData();
-    });
-    domElements.scaleSlider.addEventListener('input', (e) => {
-        appState.renderingOptions.scale = parseFloat(e.target.value);
-        domElements.scaleValue.textContent = appState.renderingOptions.scale.toFixed(2);
-    });
-    domElements.scaleSlider.addEventListener('change', () => fetchAndDisplayData());
-    domElements.lonShiftSlider.addEventListener('input', (e) => {
-        appState.renderingOptions.lonShift = parseInt(e.target.value);
-        domElements.lonShiftValue.textContent = `${appState.renderingOptions.lonShift}°`;
-    });
-    domElements.lonShiftSlider.addEventListener('change', () => fetchAndDisplayData());
 }
 
 /**
@@ -318,85 +278,47 @@ async function renderDataOnMap(decodedData) {
         return;
     }
 
-    const displayCanvas = document.createElement('canvas');
-    displayCanvas.width = nx;
-    displayCanvas.height = ny;
-    const displayCtx = displayCanvas.getContext('2d');
+    const canvas = document.createElement('canvas');
+    canvas.width = nx;
+    canvas.height = ny;
+    const ctx = canvas.getContext('2d');
     
-    // Create a temporary, off-screen canvas to hold the raw pixel data.
-    const bufferCanvas = document.createElement('canvas');
-    bufferCanvas.width = nx;
-    bufferCanvas.height = ny;
-    const bufferCtx = bufferCanvas.getContext('2d');
-    
-    const imageData = bufferCtx.createImageData(nx, ny);
+    const imageData = ctx.createImageData(nx, ny);
     const productConfig = AVAILABLE_PRODUCTS[appState.selectedProduct];
     const colorScale = productConfig.colorScale;
 
-    let processedValues = values;
-    let bounds;
-    
-    // Conditionally remap the longitude based on the debug checkbox
-    if (appState.renderingOptions.remapLongitude) {
-        const halfWidth = nx / 2;
-        const remapped = new Float32Array(values.length);
-        for (let j = 0; j < ny; j++) {
-            for (let i = 0; i < nx; i++) {
-                const oldIndex = j * nx + i;
-                let newI = (i < halfWidth) ? i + halfWidth : i - halfWidth;
-                remapped[j * nx + newI] = values[oldIndex];
-            }
+    // The GFS data has longitude from 0 to 359. We remap this to -180 to 180
+    // for Leaflet by "cutting" the data at the 180-degree meridian.
+    const halfWidth = nx / 2;
+    const remapped = new Float32Array(values.length);
+    for (let j = 0; j < ny; j++) {
+        for (let i = 0; i < nx; i++) {
+            const oldIndex = j * nx + i;
+            let newI = (i < halfWidth) ? i + halfWidth : i - halfWidth;
+            remapped[j * nx + newI] = values[oldIndex];
         }
-        processedValues = remapped;
-        bounds = [[-90, -180], [90, 180]];
-    } else {
-        bounds = [[metadata.grid.lat_last, metadata.grid.lon_first], [metadata.grid.lat_first, metadata.grid.lon_last]];
     }
-
-    // Draw the processed data to the buffer canvas's image buffer.
-    for (let i = 0; i < processedValues.length; i++) {
-        const color = colorScale(processedValues[i]);
+    
+    // Draw the remapped data to the canvas.
+    for (let i = 0; i < remapped.length; i++) {
+        const color = colorScale(remapped[i]);
         const pixelIndex = i * 4;
         imageData.data[pixelIndex] = color[0];     // R
         imageData.data[pixelIndex + 1] = color[1]; // G
         imageData.data[pixelIndex + 2] = color[2]; // B
         imageData.data[pixelIndex + 3] = 150;      // Alpha
     }
-    bufferCtx.putImageData(imageData, 0, 0);
-
-    // Apply debug transformations before drawing the buffer to the display canvas.
-    displayCtx.save();
-    const scaleX = appState.renderingOptions.flipX ? -1 : 1;
-    const scaleY = appState.renderingOptions.flipY ? -1 : 1;
-    const transX = appState.renderingOptions.flipX ? -nx : 0;
-    const transY = appState.renderingOptions.flipY ? -ny : 0;
-    displayCtx.translate(transX, transY);
-    displayCtx.scale(scaleX, scaleY);
+    ctx.putImageData(imageData, 0, 0);
     
-    // Draw the (potentially transformed) buffer canvas to the display canvas.
-    displayCtx.drawImage(bufferCanvas, 0, 0);
-    displayCtx.restore();
-
-    // Apply debug scale and shift to the final bounds
-    const scale = appState.renderingOptions.scale;
-    const lonShift = appState.renderingOptions.lonShift;
-    const centerLat = (bounds[0][0] + bounds[1][0]) / 2;
-    const centerLon = (bounds[0][1] + bounds[1][1]) / 2;
-    const height = Math.abs(bounds[1][0] - bounds[0][0]) * scale;
-    const width = Math.abs(bounds[1][1] - bounds[0][1]) * scale;
-
-    const finalBounds = [
-        [centerLat - height/2, centerLon - width/2 + lonShift],
-        [centerLat + height/2, centerLon + width/2 + lonShift]
-    ];
-    
-    const imageUrl = displayCanvas.toDataURL();
+    // The data is now correctly ordered for a standard global map.
+    const bounds = [[-90, -180], [90, 180]];
+    const imageUrl = canvas.toDataURL();
 
     if (appState.dataOverlay) {
         appState.map.removeLayer(appState.dataOverlay);
     }
     
-    appState.dataOverlay = L.imageOverlay(imageUrl, finalBounds, {
+    appState.dataOverlay = L.imageOverlay(imageUrl, bounds, {
         opacity: 0.7,
         interactive: false
     }).addTo(appState.map);

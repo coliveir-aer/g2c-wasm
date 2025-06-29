@@ -21,24 +21,6 @@
     <div id="top-bar" class="leaflet-control">
         <select id="product-selector"></select>
         <div id="level-selector"></div>
-        
-        <!-- Experimental rendering controls -->
-        <div id="debug-controls">
-            <fieldset>
-                <legend>Debug Controls</legend>
-                <label><input type="checkbox" id="remap-lon-checkbox" checked> Remap Lon</label>
-                <label><input type="checkbox" id="flip-x-checkbox"> Flip Horizontal</label>
-                <label><input type="checkbox" id="flip-y-checkbox"> Flip Vertical</label>
-                <div>
-                    <label for="scale-slider">Scale: <span id="scale-value">1.0</span></label>
-                    <input type="range" id="scale-slider" min="0.5" max="1.5" step="0.01" value="1.0">
-                </div>
-                <div>
-                    <label for="lon-shift-slider">Lon Shift: <span id="lon-shift-value">0</span>°</label>
-                    <input type="range" id="lon-shift-slider" min="-180" max="180" step="1" value="0">
-                </div>
-            </fieldset>
-        </div>
     </div>
 
     <div id="bottom-bar" class="leaflet-control">

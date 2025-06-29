@@ -6,6 +6,8 @@ The core of the project is a C wrapper around `NCEPLIBS-g2c` and its dependencie
 
 To exercise the capabilities of the WASM module, this repository includes example applications.
 
+An example deployment of the GFS Live demo site is up at: [https://coliveir-aer.github.io/g2c-wasm/](https://coliveir-aer.github.io/g2c-wasm/)
+
 ---
 
 ## Project Components

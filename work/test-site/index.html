@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRIB2 WASM Test Harness</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; color: #333; padding: 1em; line-height: 1.6; }
+        .container { max-width: 960px; margin: 0 auto; background: #fff; padding: 1em 2em; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        h1, h2 { border-bottom: 2px solid #eee; padding-bottom: 0.5em; }
+        #test-file-info { font-style: italic; color: #555; background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 0.5em 1em; margin-bottom: 1em; border-radius: 4px; word-wrap: break-word; }
+        #summary { font-weight: bold; font-size: 1.2em; padding: 0.75em; border-radius: 4px; text-align: center; }
+        #summary.pass { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;}
+        #summary.fail { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+        table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+        th, td { padding: 0.75em; text-align: left; border-bottom: 1px solid #dee2e6; }
+        th { background-color: #f8f9fa; }
+        .status-pass { color: #28a745; font-weight: bold; }
+        .status-fail { color: #dc3545; font-weight: bold; }
+        pre { background-color: #282c34; color: #abb2bf; padding: 1em; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GRIB2 WASM Module Regression Test</h1>
+        <p>This page automatically fetches a known GRIB2 file, processes it with the WASM module, and runs a series of tests against the resulting JSON metadata.</p>
+        
+        <div id="test-file-info">Fetching test file info...</div>
+
+        <div id="summary">Running tests...</div>
+
+        <h2>Test Results:</h2>
+        <table id="results-table">
+            <thead>
+                <tr>
+                    <th>Test ID</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="results-body">
+            </tbody>
+        </table>
+
+        <h2>Informational JSON Output:</h2>
+        <pre id="output">Waiting for results...</pre>
+    </div>
+
+    <script>
+        var Module = {
+            onRuntimeInitialized: () => {
+                console.log('WASM runtime is ready.');
+                window.dispatchEvent(new CustomEvent('wasmReady'));
+            },
+            locateFile: (path) => path.endsWith('.wasm') ? 'g2clib.wasm' : path,
+        };
+    </script>
+    <script src="g2clib.js"></script>
+    <script type="module" src="main.js"></script>
+</body>
+</html>

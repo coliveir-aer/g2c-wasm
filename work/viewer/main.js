@@ -65,8 +65,14 @@ async function initializeApp() {
     console.log('Initializing application...');
     domElements.runInfo.textContent = 'Finding latest GFS model run...';
 
-    // 1. Initialize the Leaflet map
-    appState.map = L.map(domElements.map).setView([40, -95], 4); // Center on the US
+    // 1. Initialize the Leaflet map.
+    // Use the EPSG4326 projection, which is a simple cylindrical projection
+    // that maps latitude and longitude directly, avoiding Mercator distortion.
+    appState.map = L.map(domElements.map, {
+        crs: L.CRS.EPSG4326,
+        worldCopyJump: true
+    }).setView([40, -95], 3); 
+    
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -94,36 +100,42 @@ async function initializeApp() {
 
 /**
  * Probes the NOAA S3 bucket to find the most recent GFS model run directory.
- * This function is robust against timezone issues by working exclusively in UTC.
+ * This function is robust against timezone issues and network requests by iterating
+ * day by day, not hour by hour.
  * @returns {Promise<{date: Date, cycle: number}|null>} The date and cycle of the latest run.
  */
 async function findLatestGfsRun() {
     // Start search from 6 hours in the future to ensure we catch the latest UTC date.
-    const searchStartDate = new Date(Date.now() + 6 * 60 * 60 * 1000);
+    let currentDate = new Date(Date.now() + 6 * 60 * 60 * 1000);
 
-    // Check for runs up to 48 hours back from our start time.
-    for (let i = 0; i < 48; i++) {
-        const dateToCheck = new Date(searchStartDate.getTime() - (i * 60 * 60 * 1000));
-        const dateStr = dateToCheck.toISOString().slice(0, 10).replace(/-/g, '');
+    // Look back up to 3 days to find a valid run.
+    for (let i = 0; i < 3; i++) {
+        const dateStr = currentDate.toISOString().slice(0, 10).replace(/-/g, '');
         
         // Check cycles in reverse chronological order (18Z, 12Z, 6Z, 0Z) for efficiency.
         for (const cycle of [18, 12, 6, 0]) {
             const cycleStr = cycle.toString().padStart(2, '0');
             const testUrl = `${S3_BUCKET_URL}gfs.${dateStr}/${cycleStr}/atmos/gfs.t${cycleStr}z.${GFS_PRODUCT_TYPE}.f000.idx`;
+            console.log(`Checking for run: ${testUrl}`);
             
             try {
-                // We use a HEAD request which is more efficient than GET as it only fetches headers.
-                const response = await fetch(testUrl, { method: 'HEAD' });
-                if (response.ok) {
+                // Use a ranged GET request to check for file existence, which is CORS-friendly.
+                const response = await fetch(testUrl, { method: 'GET', headers: { 'Range': 'bytes=0-0' } });
+                // A 206 "Partial Content" status confirms the file exists and the server supports ranged requests.
+                if (response.status === 206) {
                     // Success! We found a run. Return the UTC date and cycle.
-                    const runDate = new Date(Date.UTC(dateToCheck.getUTCFullYear(), dateToCheck.getUTCMonth(), dateToCheck.getUTCDate()));
+                    const runDate = new Date(Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth(), currentDate.getUTCDate()));
                     return { date: runDate, cycle: cycle };
                 }
             } catch (e) {
                 // Ignore fetch errors (e.g., network issue, CORS) and continue to the next candidate.
+                console.warn(`Request for ${testUrl} failed, likely does not exist.`, e);
             }
         }
+        // If no run was found for the current day, go back one day.
+        currentDate.setUTCDate(currentDate.getUTCDate() - 1);
     }
+    
     return null; // No run found after searching.
 }
 
@@ -305,45 +317,76 @@ function setupEventListeners() {
     });
 }
 
+/**
+ * Renders the decoded weather data onto a canvas and overlays it on the map.
+ * This function now remaps the data grid to match Leaflet's coordinate system.
+ * @param {{metadata: object, values: Float32Array}} decodedData - The data from the WASM module.
+ */
 async function renderDataOnMap(decodedData) {
     const { metadata, values } = decodedData;
-    const { nx, ny, lat_first, lon_first, lat_last, lon_last } = metadata.grid;
+    const { nx, ny } = metadata.grid;
 
     if (!nx || !ny || nx <= 0 || ny <= 0) {
         console.error("Invalid grid dimensions:", metadata.grid);
         return;
     }
-    
+
     const canvas = document.createElement('canvas');
     canvas.width = nx;
     canvas.height = ny;
     const ctx = canvas.getContext('2d');
     const imageData = ctx.createImageData(nx, ny);
-    
+
     const productConfig = AVAILABLE_PRODUCTS[appState.selectedProduct];
     const colorScale = productConfig.colorScale;
 
-    for (let i = 0; i < values.length; i++) {
-        const color = colorScale(values[i]);
+    // The GFS data has longitude from 0 to 359. We need to remap this to -180 to 180
+    // for Leaflet. We'll "cut" the data at the 180-degree meridian.
+    const halfWidth = nx / 2;
+    const remappedValues = new Float32Array(values.length);
+
+    for (let j = 0; j < ny; j++) {
+        for (let i = 0; i < nx; i++) {
+            const oldIndex = j * nx + i;
+            let newI;
+
+            // Pixels from 180 to 359 degrees (the right half of the GFS grid)
+            // will become the left half of our new map (-180 to 0).
+            if (i >= halfWidth) {
+                newI = i - halfWidth;
+            } 
+            // Pixels from 0 to 179 degrees (the left half of the GFS grid)
+            // will become the right half of our new map (0 to 180).
+            else {
+                newI = i + halfWidth;
+            }
+            const newIndex = j * nx + newI;
+            remappedValues[newIndex] = values[oldIndex];
+        }
+    }
+    
+    // Draw the remapped data to the canvas.
+    for (let i = 0; i < remappedValues.length; i++) {
+        const color = colorScale(remappedValues[i]);
         const pixelIndex = i * 4;
         imageData.data[pixelIndex] = color[0];     // R
         imageData.data[pixelIndex + 1] = color[1]; // G
         imageData.data[pixelIndex + 2] = color[2]; // B
         imageData.data[pixelIndex + 3] = 150;      // Alpha (semi-transparent)
     }
-    
     ctx.putImageData(imageData, 0, 0);
-    
-    const bounds = [[lat_first, lon_first], [lat_last, lon_last]];
+
+    // Now that the data is correctly ordered, we can use standard global bounds.
+    const bounds = [[-90, -180], [90, 180]];
     const imageUrl = canvas.toDataURL();
-    
+
     if (appState.dataOverlay) {
         appState.map.removeLayer(appState.dataOverlay);
     }
     
     appState.dataOverlay = L.imageOverlay(imageUrl, bounds, {
         opacity: 0.7,
-        interactive: false // The overlay should not capture mouse events
+        interactive: false
     }).addTo(appState.map);
 }
 

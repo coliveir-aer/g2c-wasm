@@ -414,6 +414,34 @@ async function renderDataOnMap(decodedData) {
             }
         }
 
+    } else if (appState.selectedProduct === 'precip_total') {
+        // Use a fixed, clamped range for precipitation in mm
+        displayMin = 0;
+        displayMax = 50;
+        displayUnit = 'mm';
+        labelIncrement = 5;
+
+        // Create a wrapper scale that clamps the input precip value for color lookup
+        displayColorScale = (p) => {
+            const clampedP = Math.max(displayMin, Math.min(p, displayMax));
+            return colorScale(clampedP);
+        };
+        
+        for (let i = 0; i < remapped.length; i++) {
+            const value = remapped[i];
+            const color = displayColorScale(value);
+            const pixelIndex = i * 4;
+            
+            if (color) {
+                imageData.data[pixelIndex] = color[0];
+                imageData.data[pixelIndex + 1] = color[1];
+                imageData.data[pixelIndex + 2] = color[2];
+                imageData.data[pixelIndex + 3] = 200;
+            } else {
+                imageData.data[pixelIndex + 3] = 0;
+            }
+        }
+
     } else {
         // Default behavior for non-temperature products
         let min = Infinity;

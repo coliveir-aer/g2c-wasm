@@ -104,6 +104,9 @@ const domElements = {
     timelineSlider: document.getElementById('timeline-slider'),
     forecastHourDisplay: document.getElementById('forecast-hour-display'),
     runInfo: document.getElementById('run-info'),
+    stepBackwardBtn: document.getElementById('time-step-backward'),
+    stepForwardBtn: document.getElementById('time-step-forward'),
+    loadForecastBtn: document.getElementById('load-forecast-btn'),
 };
 
 
@@ -323,13 +326,51 @@ function updateTimeDisplay() {
     domElements.forecastHourDisplay.textContent = selectedDate.toUTCString();
 }
 
+function getStepMilliseconds() {
+    const runTimestamp = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
+    const currentHour = (appState.selectedTimestamp - runTimestamp) / (60 * 60 * 1000);
+    const hourInMs = 60 * 60 * 1000;
+
+    if (GFS_PRODUCT_TYPE === 'pgrb2.0p25' && currentHour < 120) {
+        return 1 * hourInMs;
+    }
+    return 3 * hourInMs;
+}
+
 function setupEventListeners() {
     // Main UI Listeners
     domElements.timelineSlider.addEventListener('input', () => {
         appState.selectedTimestamp = parseInt(domElements.timelineSlider.value);
         updateTimeDisplay();
     });
-    domElements.timelineSlider.addEventListener('change', () => fetchAndDisplayData());
+
+    domElements.loadForecastBtn.addEventListener('click', () => fetchAndDisplayData());
+
+    const stepTime = (direction) => {
+        const slider = domElements.timelineSlider;
+        const step = getStepMilliseconds();
+        const currentValue = parseInt(slider.value, 10);
+        
+        // For 3-hour steps, snap to the nearest 3-hour mark before stepping
+        let baseValue = currentValue;
+        if (step > (60 * 60 * 1000)) {
+            const runTimestamp = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
+            const currentHour = (currentValue - runTimestamp) / (60 * 60 * 1000);
+            const snappedHour = Math.round(currentHour / 3) * 3;
+            baseValue = runTimestamp + (snappedHour * 60 * 60 * 1000);
+        }
+
+        const newValue = baseValue + (step * direction);
+        
+        slider.value = newValue;
+        appState.selectedTimestamp = newValue;
+        updateTimeDisplay();
+        fetchAndDisplayData();
+    };
+
+    domElements.stepBackwardBtn.addEventListener('click', () => stepTime(-1));
+    domElements.stepForwardBtn.addEventListener('click', () => stepTime(1));
+
     domElements.productSelector.addEventListener('change', (e) => {
         appState.selectedProduct = e.target.value;
         
@@ -443,7 +484,7 @@ async function renderDataOnMap(decodedData) {
         }
 
     } else {
-        // Default behavior for non-temperature products
+        // Default behavior for other products
         let min = Infinity;
         let max = -Infinity;
         for (let i = 0; i < remapped.length; i++) {

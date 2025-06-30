@@ -5,19 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GFS Live Weather Viewer</title>
     
-    <!-- External Libraries -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     
-    <!-- Local Stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- This div will hold the Leaflet map -->
     <div id="map"></div>
 
-    <!-- UI CONTROLS -->
     <div id="top-bar" class="leaflet-control">
         <select id="product-selector"></select>
         <div id="level-selector"></div>
@@ -26,14 +22,16 @@
     <div id="bottom-bar" class="leaflet-control">
         <div id="timeline-controls">
             <label for="timeline-slider">Forecast Time: <span id="forecast-hour-display">+0h</span></label>
+            <button id="time-step-backward" class="time-step-btn">-</button>
             <input type="range" min="0" max="72" step="3" value="0" id="timeline-slider">
+            <button id="time-step-forward" class="time-step-btn">+</button>
+            <button id="load-forecast-btn" class="load-btn">Load</button>
         </div>
         <div id="run-info">
             Loading latest GFS run...
         </div>
     </div>
     
-    <!-- Emscripten/WASM Loader Scripts -->
     <script>
         var Module = {
             onRuntimeInitialized: () => {
@@ -45,7 +43,6 @@
     </script>
     <script src="g2clib.js"></script>
     
-    <!-- Main Application Logic -->
     <script src="colorbar.js" type="module"></script>
     <script src="main.js" type="module"></script>
 </body>

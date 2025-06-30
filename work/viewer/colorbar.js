@@ -8,8 +8,9 @@
  * @param {number} maxValue - The maximum value of the data range.
  * @param {string} productName - The name of the displayed product.
  * @param {string} unit - The unit of the data values.
+ * @param {number|null} labelIncrement - The increment for labels, or null for dynamic.
  */
-export function updateColorBar(map, colorScale, minValue, maxValue, productName, unit) {
+export function updateColorBar(map, colorScale, minValue, maxValue, productName, unit, labelIncrement) {
     let colorBar = map.colorBar;
 
     if (!colorBar) {
@@ -18,13 +19,12 @@ export function updateColorBar(map, colorScale, minValue, maxValue, productName,
         colorBar.onAdd = function (map) {
             const div = L.DomUtil.create('div', 'info legend');
             this._div = div;
-            this.update(colorScale, minValue, maxValue, productName, unit);
+            this.update(colorScale, minValue, maxValue, productName, unit, labelIncrement);
             return div;
         };
 
-        colorBar.update = function (scale, min, max, name, unit) {
+        colorBar.update = function (scale, min, max, name, unit, increment) {
             const div = this._div;
-            const numLabels = 10;
             const range = max - min;
 
             div.innerHTML = `<h4 class="legend-title">${name} (${unit})</h4>`;
@@ -48,12 +48,24 @@ export function updateColorBar(map, colorScale, minValue, maxValue, productName,
             
             const labels = document.createElement('div');
             labels.className = 'legend-labels';
+            labels.innerHTML = ''; // Clear previous labels
 
-            for (let i = 0; i <= numLabels; i++) {
-                const value = max - (i / numLabels) * range;
-                const label = document.createElement('span');
-                label.textContent = Math.round(value);
-                labels.appendChild(label);
+            if (increment) {
+                // Generate labels at fixed increments
+                for (let value = max; value >= min; value -= increment) {
+                    const label = document.createElement('span');
+                    label.textContent = Math.round(value);
+                    labels.appendChild(label);
+                }
+            } else {
+                // Generate a fixed number of evenly spaced labels
+                const numLabels = 10;
+                for (let i = 0; i <= numLabels; i++) {
+                    const value = max - (i / numLabels) * range;
+                    const label = document.createElement('span');
+                    label.textContent = Math.round(value);
+                    labels.appendChild(label);
+                }
             }
             
             legendBody.appendChild(gradient);
@@ -65,5 +77,5 @@ export function updateColorBar(map, colorScale, minValue, maxValue, productName,
         colorBar.addTo(map);
     }
 
-    colorBar.update(colorScale, minValue, maxValue, productName, unit);
+    colorBar.update(colorScale, minValue, maxValue, productName, unit, labelIncrement);
 }

@@ -45,6 +45,8 @@ const AVAILABLE_PRODUCTS = {
     }
 };
 
+// --- MODULE IMPORTS ---
+import { updateColorBar } from './colorbar.js';
 
 // --- APPLICATION STATE ---
 const appState = {
@@ -340,8 +342,14 @@ async function renderDataOnMap(decodedData) {
         }
     }
     
+    let min = Infinity;
+    let max = -Infinity;
     for (let i = 0; i < remapped.length; i++) {
-        const color = colorScale(remapped[i]);
+        const value = remapped[i];
+        if (value < min) min = value;
+        if (value > max) max = value;
+
+        const color = colorScale(value);
         const pixelIndex = i * 4;
         
         if (color) {
@@ -355,6 +363,8 @@ async function renderDataOnMap(decodedData) {
     }
     ctx.putImageData(imageData, 0, 0);
     
+    updateColorBar(appState.map, colorScale, min, max, productConfig.name);
+
     const bounds = [[-90, -180], [90, 180]];
     const imageUrl = canvas.toDataURL();
 

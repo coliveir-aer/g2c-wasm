@@ -15,15 +15,33 @@ const AVAILABLE_PRODUCTS = {
         unit: 'K',
         minForecastHour: 0,
         // This color scale now returns only [R, G, B] values.
-        colorScale: (value) => { 
-            if (value < 250) return [0, 0, 139];
-            if (value < 260) return [0, 0, 255];
-            if (value < 270) return [0, 255, 255];
-            if (value < 280) return [0, 255, 0];
-            if (value < 290) return [255, 255, 0];
-            if (value < 300) return [255, 165, 0];
-            if (value < 310) return [255, 0, 0];
-            return [139, 0, 0];
+        colorScale: (value) => {
+            const stops = [
+                { val: 250, rgb: [0, 0, 139] },   // Dark Blue
+                { val: 260, rgb: [0, 0, 255] },   // Blue
+                { val: 270, rgb: [0, 255, 255] }, // Cyan
+                { val: 280, rgb: [0, 255, 0] },   // Green
+                { val: 290, rgb: [255, 255, 0] }, // Yellow
+                { val: 300, rgb: [255, 165, 0] }, // Orange
+                { val: 310, rgb: [255, 0, 0] },   // Red
+                { val: 315, rgb: [139, 0, 0] }    // Dark Red
+            ];
+
+            if (value <= stops[0].val) return stops[0].rgb;
+            if (value >= stops[stops.length - 1].val) return stops[stops.length - 1].rgb;
+
+            for (let i = 0; i < stops.length - 1; i++) {
+                const start = stops[i];
+                const end = stops[i + 1];
+                if (value >= start.val && value < end.val) {
+                    const t = (value - start.val) / (end.val - start.val);
+                    const r = Math.round(start.rgb[0] + t * (end.rgb[0] - start.rgb[0]));
+                    const g = Math.round(start.rgb[1] + t * (end.rgb[1] - start.rgb[1]));
+                    const b = Math.round(start.rgb[2] + t * (end.rgb[2] - start.rgb[2]));
+                    return [r, g, b];
+                }
+            }
+            return stops[stops.length - 1].rgb;
         }
     },
     'precip_total': {
@@ -36,13 +54,31 @@ const AVAILABLE_PRODUCTS = {
         // It returns null for zero precipitation, which is handled in the render function.
         colorScale: (value) => {
             if (value <= 0.1) return null; // No significant rain
-            if (value < 1)    return [144, 238, 144]; // Very light green
-            if (value < 2.5)  return [0, 255, 0];     // Light green
-            if (value < 5)    return [0, 200, 0];     // Green
-            if (value < 10)   return [255, 255, 0];   // Yellow
-            if (value < 25)   return [255, 165, 0];   // Orange
-            if (value < 50)   return [255, 0, 0];     // Red
-            return [180, 0, 0];                     // Dark Red
+            const stops = [
+                { val: 1,   rgb: [144, 238, 144] }, // Very light green
+                { val: 2.5, rgb: [0, 255, 0] },     // Light green
+                { val: 5,   rgb: [0, 200, 0] },     // Green
+                { val: 10,  rgb: [255, 255, 0] },   // Yellow
+                { val: 25,  rgb: [255, 165, 0] },   // Orange
+                { val: 50,  rgb: [255, 0, 0] },     // Red
+                { val: 75,  rgb: [180, 0, 0] }      // Dark Red
+            ];
+
+            if (value <= stops[0].val) return stops[0].rgb;
+            if (value >= stops[stops.length - 1].val) return stops[stops.length - 1].rgb;
+
+            for (let i = 0; i < stops.length - 1; i++) {
+                const start = stops[i];
+                const end = stops[i + 1];
+                if (value >= start.val && value < end.val) {
+                    const t = (value - start.val) / (end.val - start.val);
+                    const r = Math.round(start.rgb[0] + t * (end.rgb[0] - start.rgb[0]));
+                    const g = Math.round(start.rgb[1] + t * (end.rgb[1] - start.rgb[1]));
+                    const b = Math.round(start.rgb[2] + t * (end.rgb[2] - start.rgb[2]));
+                    return [r, g, b];
+                }
+            }
+            return stops[stops.length - 1].rgb;
         }
     }
 };
@@ -344,43 +380,70 @@ async function renderDataOnMap(decodedData) {
         }
     }
     
-    let min = Infinity;
-    let max = -Infinity;
-    for (let i = 0; i < remapped.length; i++) {
-        const value = remapped[i];
-        if (value < min) min = value;
-        if (value > max) max = value;
-
-        const color = colorScale(value);
-        const pixelIndex = i * 4;
-        
-        if (color) {
-            imageData.data[pixelIndex] = color[0];
-            imageData.data[pixelIndex + 1] = color[1];
-            imageData.data[pixelIndex + 2] = color[2];
-            imageData.data[pixelIndex + 3] = 200;
-        } else {
-            imageData.data[pixelIndex + 3] = 0;
-        }
-    }
-    ctx.putImageData(imageData, 0, 0);
-    
     // Handle temperature conversion and unit display
-    let displayMin = min;
-    let displayMax = max;
-    let displayUnit = productConfig.unit;
-    let displayColorScale = colorScale;
+    let displayMin, displayMax, displayUnit, displayColorScale, labelIncrement = null;
 
     if (appState.selectedProduct === 'temp_2m') {
         const kToF = (k) => (k - 273.15) * 9/5 + 32;
-        displayMin = kToF(min);
-        displayMax = kToF(max);
+        
+        // Use a fixed, clamped range for temperature in Fahrenheit
+        displayMin = -20;
+        displayMax = 110;
         displayUnit = '°F';
-        // Create a wrapper scale that converts F back to K for color lookup
-        displayColorScale = (f) => colorScale((f - 32) * 5/9 + 273.15);
-    }
+        labelIncrement = 10;
 
-    updateColorBar(appState.map, displayColorScale, displayMin, displayMax, productConfig.name, displayUnit);
+        // Create a wrapper scale that clamps the input F value, then converts it back to K for color lookup
+        displayColorScale = (f) => {
+            const clampedF = Math.max(displayMin, Math.min(f, displayMax));
+            const kelvin = (clampedF - 32) * 5/9 + 273.15;
+            return colorScale(kelvin);
+        };
+
+        for (let i = 0; i < remapped.length; i++) {
+            const fahrenheit = kToF(remapped[i]);
+            const color = displayColorScale(fahrenheit);
+            const pixelIndex = i * 4;
+            
+            if (color) {
+                imageData.data[pixelIndex] = color[0];
+                imageData.data[pixelIndex + 1] = color[1];
+                imageData.data[pixelIndex + 2] = color[2];
+                imageData.data[pixelIndex + 3] = 200;
+            } else {
+                imageData.data[pixelIndex + 3] = 0;
+            }
+        }
+
+    } else {
+        // Default behavior for non-temperature products
+        let min = Infinity;
+        let max = -Infinity;
+        for (let i = 0; i < remapped.length; i++) {
+            const value = remapped[i];
+            if (value < min) min = value;
+            if (value > max) max = value;
+    
+            const color = colorScale(value);
+            const pixelIndex = i * 4;
+            
+            if (color) {
+                imageData.data[pixelIndex] = color[0];
+                imageData.data[pixelIndex + 1] = color[1];
+                imageData.data[pixelIndex + 2] = color[2];
+                imageData.data[pixelIndex + 3] = 200;
+            } else {
+                imageData.data[pixelIndex + 3] = 0;
+            }
+        }
+        displayMin = min;
+        displayMax = max;
+        displayUnit = productConfig.unit;
+        displayColorScale = colorScale;
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
+    
+    updateColorBar(appState.map, displayColorScale, displayMin, displayMax, productConfig.name, displayUnit, labelIncrement);
 
     const bounds = [[-90, -180], [90, 180]];
     const imageUrl = canvas.toDataURL();

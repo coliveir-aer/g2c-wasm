@@ -6,9 +6,10 @@
  * @param {Function} colorScale - The function used to generate colors from values.
  * @param {number} minValue - The minimum value of the data range.
  * @param {number} maxValue - The maximum value of the data range.
- * @param {string} productName - The name of the displayed product (e.g., "2m Temperature").
+ * @param {string} productName - The name of the displayed product.
+ * @param {string} unit - The unit of the data values.
  */
-export function updateColorBar(map, colorScale, minValue, maxValue, productName) {
+export function updateColorBar(map, colorScale, minValue, maxValue, productName, unit) {
     let colorBar = map.colorBar;
 
     if (!colorBar) {
@@ -17,20 +18,26 @@ export function updateColorBar(map, colorScale, minValue, maxValue, productName)
         colorBar.onAdd = function (map) {
             const div = L.DomUtil.create('div', 'info legend');
             this._div = div;
-            this.update(colorScale, minValue, maxValue, productName);
+            this.update(colorScale, minValue, maxValue, productName, unit);
             return div;
         };
 
-        colorBar.update = function (scale, min, max, name) {
+        colorBar.update = function (scale, min, max, name, unit) {
             const div = this._div;
-            div.innerHTML = `<h4 class="legend-title">${name}</h4>`;
+            const numLabels = 10;
+            const range = max - min;
+
+            div.innerHTML = `<h4 class="legend-title">${name} (${unit})</h4>`;
+            
+            const legendBody = document.createElement('div');
+            legendBody.className = 'legend-body';
+
             const gradient = document.createElement('div');
             gradient.className = 'legend-gradient';
 
-            // Generate the gradient background from the color scale
-            let gradientCss = 'linear-gradient(to right';
+            let gradientCss = 'linear-gradient(to top';
             for (let i = 0; i <= 100; i++) {
-                const value = min + (i / 100) * (max - min);
+                const value = min + (i / 100) * range;
                 const color = scale(value);
                 if (color) {
                     gradientCss += `, rgb(${color[0]}, ${color[1]}, ${color[2]})`;
@@ -38,18 +45,25 @@ export function updateColorBar(map, colorScale, minValue, maxValue, productName)
             }
             gradientCss += ')';
             gradient.style.background = gradientCss;
-            div.appendChild(gradient);
-
-            // Add labels
+            
             const labels = document.createElement('div');
             labels.className = 'legend-labels';
-            labels.innerHTML = `<span>${min.toFixed(1)}</span><span>${((min + max) / 2).toFixed(1)}</span><span>${max.toFixed(1)}</span>`;
-            div.appendChild(labels);
+
+            for (let i = 0; i <= numLabels; i++) {
+                const value = max - (i / numLabels) * range;
+                const label = document.createElement('span');
+                label.textContent = Math.round(value);
+                labels.appendChild(label);
+            }
+            
+            legendBody.appendChild(gradient);
+            legendBody.appendChild(labels);
+            div.appendChild(legendBody);
         };
 
         map.colorBar = colorBar;
         colorBar.addTo(map);
     }
 
-    colorBar.update(colorScale, minValue, maxValue, productName);
+    colorBar.update(colorScale, minValue, maxValue, productName, unit);
 }

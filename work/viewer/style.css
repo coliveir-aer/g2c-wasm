@@ -98,7 +98,7 @@ html, body {
 }
 /* --- Color Bar Legend --- */
 .info.legend {
-    width: 250px;
+    width: auto;
     background: rgba(255, 255, 255, 0.85);
     padding: 10px;
     border-radius: 8px;
@@ -108,17 +108,23 @@ html, body {
     margin: 0 0 8px 0;
     text-align: center;
     font-weight: bold;
-    font-size: 1em;
+    font-size: 0.9em;
+}
+.legend-body {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
 }
 .legend-gradient {
-    width: 100%;
-    height: 20px;
+    width: 20px;
+    height: 200px;
     border-radius: 4px;
     border: 1px solid #999;
 }
 .legend-labels {
     display: flex;
+    flex-direction: column;
     justify-content: space-between;
     font-size: 0.8em;
-    margin-top: 4px;
+    text-align: right;
 }

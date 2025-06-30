@@ -12,6 +12,7 @@ const AVAILABLE_PRODUCTS = {
         name: '2m Temperature',
         product: 'TMP',
         level: '2 m above ground',
+        unit: 'K',
         minForecastHour: 0,
         // This color scale now returns only [R, G, B] values.
         colorScale: (value) => { 
@@ -29,6 +30,7 @@ const AVAILABLE_PRODUCTS = {
         name: 'Total Precipitation',
         product: 'APCP',
         level: 'surface',
+        unit: 'mm',
         minForecastHour: 3, // APCP is an accumulated product, not available at hour 0.
         // This color scale also returns only [R, G, B].
         // It returns null for zero precipitation, which is handled in the render function.
@@ -363,7 +365,22 @@ async function renderDataOnMap(decodedData) {
     }
     ctx.putImageData(imageData, 0, 0);
     
-    updateColorBar(appState.map, colorScale, min, max, productConfig.name);
+    // Handle temperature conversion and unit display
+    let displayMin = min;
+    let displayMax = max;
+    let displayUnit = productConfig.unit;
+    let displayColorScale = colorScale;
+
+    if (appState.selectedProduct === 'temp_2m') {
+        const kToF = (k) => (k - 273.15) * 9/5 + 32;
+        displayMin = kToF(min);
+        displayMax = kToF(max);
+        displayUnit = '°F';
+        // Create a wrapper scale that converts F back to K for color lookup
+        displayColorScale = (f) => colorScale((f - 32) * 5/9 + 273.15);
+    }
+
+    updateColorBar(appState.map, displayColorScale, displayMin, displayMax, productConfig.name, displayUnit);
 
     const bounds = [[-90, -180], [90, 180]];
     const imageUrl = canvas.toDataURL();

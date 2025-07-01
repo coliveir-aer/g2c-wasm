@@ -105,12 +105,10 @@ const domElements = {
     map: document.getElementById('map'),
     productSelector: document.getElementById('product-selector'),
     timelineSlider: document.getElementById('timeline-slider'),
-    forecastHourDisplay: document.getElementById('forecast-hour-display'),
-    runInfo: document.getElementById('run-info'),
+    forecastDisplay: document.getElementById('forecast-display'),
     stepBackwardBtn: document.getElementById('time-step-backward'),
     stepForwardBtn: document.getElementById('time-step-forward'),
     loadForecastBtn: document.getElementById('load-forecast-btn'),
-    timeZoneToggle: document.getElementById('time-zone-toggle'),
 };
 
 
@@ -162,13 +160,17 @@ function updateTimelineStep() {
  */
 async function initializeApp() {
     console.log('Initializing application...');
-    domElements.runInfo.textContent = 'Finding latest GFS model run...';
 
     // Initialize Leaflet map with the correct projection
     appState.map = L.map(domElements.map, {
         crs: L.CRS.EPSG4326,
-        worldCopyJump: true
+        worldCopyJump: true,
+        zoomControl: false, // Disable default zoom control
+        attributionControl: false, // Disable attribution control
     }).setView([20, 0], 2); 
+    
+    // Add zoom control to the top right
+    L.control.zoom({ position: 'topright' }).addTo(appState.map);
     
     // Create a dedicated pane for city labels to ensure they are on top.
     appState.map.createPane('cityLabels');
@@ -195,7 +197,7 @@ async function initializeApp() {
 
     const latestRun = await findLatestGfsRun();
     if (!latestRun) {
-        domElements.runInfo.textContent = 'Error: Could not find any recent GFS model runs.';
+        console.error('Error: Could not find any recent GFS model runs.');
         return;
     }
     appState.gfsRun = latestRun;
@@ -245,7 +247,7 @@ async function fetchAndDisplayData() {
         return;
     }
     appState.isFetching = true;
-    domElements.runInfo.textContent = 'Fetching data...';
+    console.log('Fetching data...');
 
     try {
         const runTimestamp = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
@@ -261,7 +263,7 @@ async function fetchAndDisplayData() {
         const s3Path = `gfs.${dateStr}/${cycleStr}/atmos/${fileName}`;
         const idxUrl = `${S3_BUCKET_URL}${s3Path}.idx`;
 
-        domElements.runInfo.textContent = 'Fetching GRIB index...';
+        console.log('Fetching GRIB index...');
         const idxResponse = await fetch(idxUrl);
         if (!idxResponse.ok) throw new Error(`Could not fetch index for F${hourStr}: ${idxResponse.statusText}`);
         const indexText = await idxResponse.text();
@@ -270,28 +272,26 @@ async function fetchAndDisplayData() {
         const byteRange = findMessageInIndex(indexText, productInfo);
         if (!byteRange) throw new Error(`Could not find ${productInfo.name} in index file for F${hourStr}.`);
 
-        domElements.runInfo.textContent = 'Fetching GRIB message...';
+        console.log('Fetching GRIB message...');
         const gribResponse = await fetch(`${S3_BUCKET_URL}${s3Path}`, {
             headers: { 'Range': `bytes=${byteRange.start}-${byteRange.end}` }
         });
         if (!gribResponse.ok) throw new Error(`Byte range fetch failed for F${hourStr}: ${gribResponse.statusText}`);
         const gribMessageBuffer = await gribResponse.arrayBuffer();
 
-        domElements.runInfo.textContent = 'Decoding with WASM...';
+        console.log('Decoding with WASM...');
         const decodedData = processGribData(gribMessageBuffer);
         if (!decodedData) throw new Error('WASM module failed to decode data.');
         
         appState.lastDecodedData = decodedData; // Store for city markers
         
-        domElements.runInfo.textContent = 'Rendering map overlay...';
+        console.log('Rendering map overlay...');
         await renderDataOnMap(decodedData);
         
-        const runDateString = new Date(runTimestamp).toUTCString();
-        domElements.runInfo.textContent = `Displaying GFS Run: ${runDateString}`;
+        console.log(`Displaying GFS Run: ${new Date(runTimestamp).toUTCString()}`);
 
     } catch (error) {
         console.error('Error in fetchAndDisplayData:', error);
-        domElements.runInfo.textContent = `Error: ${error.message}`;
         appState.lastDecodedData = null; // Clear data on error
         clearCityMarkers(); // Clear markers on error
     } finally {
@@ -394,15 +394,42 @@ function setupTimeSlider() {
 
 function updateTimeDisplay() {
     const selectedDate = new Date(parseInt(domElements.timelineSlider.value));
+    
+    let timeString;
     if (appState.timeDisplayMode === 'local') {
         const options = {
             weekday: 'short', month: 'short', day: 'numeric', 
             hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
         };
-        domElements.forecastHourDisplay.textContent = selectedDate.toLocaleString(undefined, options);
+        timeString = selectedDate.toLocaleString(undefined, options);
     } else {
-        domElements.forecastHourDisplay.textContent = selectedDate.toUTCString();
+        timeString = selectedDate.toUTCString();
     }
+
+    domElements.forecastDisplay.innerHTML = `
+        <div id="forecast-display-content">
+            <span id="forecast-hour-display">${timeString}</span>
+            <div id="time-toggle">
+                <span class="toggle-label toggle-label-local">Local</span>
+                <label class="switch">
+                    <input type="checkbox" id="time-zone-toggle">
+                    <span class="slider round"></span>
+                </label>
+                <span class="toggle-label toggle-label-utc">UTC</span>
+            </div>
+        </div>
+    `;
+
+    // Re-attach event listener and set state for the newly created toggle
+    const toggle = document.getElementById('time-zone-toggle');
+    toggle.checked = appState.timeDisplayMode === 'utc';
+    document.querySelector('.toggle-label-local').classList.toggle('active', appState.timeDisplayMode === 'local');
+    document.querySelector('.toggle-label-utc').classList.toggle('active', appState.timeDisplayMode === 'utc');
+    
+    toggle.addEventListener('change', (e) => {
+        appState.timeDisplayMode = e.target.checked ? 'utc' : 'local';
+        updateTimeDisplay();
+    });
 }
 
 function setupEventListeners() {
@@ -462,13 +489,6 @@ function setupEventListeners() {
         domElements.timelineSlider.value = snappedTime;
         updateTimeDisplay();
         fetchAndDisplayData();
-    });
-
-    domElements.timeZoneToggle.addEventListener('change', (e) => {
-        appState.timeDisplayMode = e.target.checked ? 'utc' : 'local';
-        document.querySelector('.toggle-label-local').classList.toggle('active', appState.timeDisplayMode === 'local');
-        document.querySelector('.toggle-label-utc').classList.toggle('active', appState.timeDisplayMode === 'utc');
-        updateTimeDisplay();
     });
 }
 

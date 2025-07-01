@@ -160,3 +160,41 @@ html, body {
     font-size: 0.8em;
     text-align: right;
 }
+
+/* --- City Temperature Markers --- */
+.city-marker-container {
+    position: relative;
+    pointer-events: none; /* Allows clicks to pass through */
+}
+
+.city-dot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    left: 0;
+    top: 0;
+    background-color: #fff;
+    border: 1.5px solid #000;
+    border-radius: 50%;
+    box-shadow: 0 0 2px rgba(0,0,0,0.5);
+}
+
+.city-label {
+    position: absolute;
+    left: 14px; /* Position to the right of the dot */
+    top: -8px; /* Vertically center the label text */
+    background-color: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.7);
+}
+
+
+/* --- Custom Map Panes --- */
+.leaflet-pane.leaflet-city-labels-pane {
+    pointer-events: none;
+}

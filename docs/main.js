@@ -85,6 +85,7 @@ const AVAILABLE_PRODUCTS = {
 
 // --- MODULE IMPORTS ---
 import { updateColorBar } from './colorbar.js';
+import { loadCityData, updateCityMarkers, clearCityMarkers } from './cities.js';
 
 // --- APPLICATION STATE ---
 const appState = {
@@ -94,6 +95,7 @@ const appState = {
     map: null,
     dataOverlay: null,
     isFetching: false,
+    lastDecodedData: null,
 };
 
 
@@ -125,6 +127,10 @@ async function initializeApp() {
         worldCopyJump: true
     }).setView([20, 0], 2); 
     
+    // Create a dedicated pane for city labels to ensure they are on top.
+    appState.map.createPane('cityLabels');
+    appState.map.getPane('cityLabels').style.zIndex = 650;
+    
     // Use a WMS tile layer from NASA GIBS that serves tiles in the correct EPSG:4326 projection.
     L.tileLayer.wms('https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi', {
         layers: 'OSM_Land_Water_Map',
@@ -132,6 +138,17 @@ async function initializeApp() {
         transparent: true,
         attribution: 'NASA GIBS'
     }).addTo(appState.map);
+
+    // Add event listeners for updating city markers on map interaction
+    appState.map.on('zoomend moveend', () => {
+        if (appState.selectedProduct === 'temp_2m') {
+            updateCityMarkers(appState.map, appState);
+        } else {
+            clearCityMarkers();
+        }
+    });
+
+    await loadCityData();
 
     const latestRun = await findLatestGfsRun();
     if (!latestRun) {
@@ -225,6 +242,8 @@ async function fetchAndDisplayData() {
         const decodedData = processGribData(gribMessageBuffer);
         if (!decodedData) throw new Error('WASM module failed to decode data.');
         
+        appState.lastDecodedData = decodedData; // Store for city markers
+        
         domElements.runInfo.textContent = 'Rendering map overlay...';
         await renderDataOnMap(decodedData);
         
@@ -234,6 +253,8 @@ async function fetchAndDisplayData() {
     } catch (error) {
         console.error('Error in fetchAndDisplayData:', error);
         domElements.runInfo.textContent = `Error: ${error.message}`;
+        appState.lastDecodedData = null; // Clear data on error
+        clearCityMarkers(); // Clear markers on error
     } finally {
         appState.isFetching = false;
     }
@@ -525,6 +546,13 @@ async function renderDataOnMap(decodedData) {
         opacity: 0.7,
         interactive: false
     }).addTo(appState.map);
+
+    // After rendering the main overlay, update or clear the city markers
+    if (appState.selectedProduct === 'temp_2m') {
+        updateCityMarkers(appState.map, appState);
+    } else {
+        clearCityMarkers();
+    }
 }
 
 

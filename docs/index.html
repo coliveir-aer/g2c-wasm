@@ -22,6 +22,14 @@
     <div id="bottom-bar" class="leaflet-control">
         <div id="timeline-controls">
             <label for="timeline-slider">Forecast Time: <span id="forecast-hour-display">+0h</span></label>
+            <div id="time-toggle">
+                <span class="toggle-label toggle-label-local active">Local</span>
+                <label class="switch">
+                    <input type="checkbox" id="time-zone-toggle">
+                    <span class="slider round"></span>
+                </label>
+                <span class="toggle-label toggle-label-utc">UTC</span>
+            </div>
             <button id="time-step-backward" class="time-step-btn">-</button>
             <input type="range" min="0" max="72" step="3" value="0" id="timeline-slider">
             <button id="time-step-forward" class="time-step-btn">+</button>

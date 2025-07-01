@@ -4,7 +4,7 @@
 const S3_BUCKET_URL = 'https://noaa-gfs-bdp-pds.s3.amazonaws.com/';
 
 // The GFS product type to be used. 'pgrb2.0p25' is 0.25 degree, 'pgrb2.1p00' is 1.00 degree.
-const GFS_PRODUCT_TYPE = 'pgrb2.0p50'; 
+const GFS_PRODUCT_TYPE = 'pgrb2.0p25'; 
 
 // Definition of the weather products we want to make available.
 const AVAILABLE_PRODUCTS = {
@@ -96,6 +96,7 @@ const appState = {
     dataOverlay: null,
     isFetching: false,
     lastDecodedData: null,
+    timeDisplayMode: 'local', // 'local' or 'utc'
 };
 
 
@@ -109,6 +110,7 @@ const domElements = {
     stepBackwardBtn: document.getElementById('time-step-backward'),
     stepForwardBtn: document.getElementById('time-step-forward'),
     loadForecastBtn: document.getElementById('load-forecast-btn'),
+    timeZoneToggle: document.getElementById('time-zone-toggle'),
 };
 
 
@@ -344,7 +346,15 @@ function setupTimeSlider() {
 
 function updateTimeDisplay() {
     const selectedDate = new Date(parseInt(domElements.timelineSlider.value));
-    domElements.forecastHourDisplay.textContent = selectedDate.toUTCString();
+    if (appState.timeDisplayMode === 'local') {
+        const options = {
+            weekday: 'short', month: 'short', day: 'numeric', 
+            hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+        };
+        domElements.forecastHourDisplay.textContent = selectedDate.toLocaleString(undefined, options);
+    } else {
+        domElements.forecastHourDisplay.textContent = selectedDate.toUTCString();
+    }
 }
 
 function getStepMilliseconds() {
@@ -407,6 +417,13 @@ function setupEventListeners() {
         }
         
         fetchAndDisplayData();
+    });
+
+    domElements.timeZoneToggle.addEventListener('change', (e) => {
+        appState.timeDisplayMode = e.target.checked ? 'utc' : 'local';
+        document.querySelector('.toggle-label-local').classList.toggle('active', appState.timeDisplayMode === 'local');
+        document.querySelector('.toggle-label-utc').classList.toggle('active', appState.timeDisplayMode === 'utc');
+        updateTimeDisplay();
     });
 }
 

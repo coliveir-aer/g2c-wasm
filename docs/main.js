@@ -114,6 +114,47 @@ const domElements = {
 };
 
 
+// --- TIME-STEPPING HELPER ---
+
+/**
+ * Snaps a given timestamp to the nearest valid GFS forecast interval.
+ * @param {number} timestamp - The timestamp to snap.
+ * @returns {number} The snapped timestamp.
+ */
+function getSnappedTimestamp(timestamp) {
+    const runTimestamp = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
+    const hourInMs = 60 * 60 * 1000;
+    
+    const forecastHour = (timestamp - runTimestamp) / hourInMs;
+
+    let snappedHour;
+    if (GFS_PRODUCT_TYPE === 'pgrb2.0p25' && forecastHour <= 120) {
+        // Hourly forecasts up to 120 hours
+        snappedHour = Math.round(forecastHour);
+    } else {
+        // 3-hourly forecasts otherwise
+        snappedHour = Math.round(forecastHour / 3) * 3;
+    }
+    
+    return runTimestamp + (snappedHour * hourInMs);
+}
+
+/**
+ * Updates the step attribute of the timeline slider based on the current product and time.
+ */
+function updateTimelineStep() {
+    const runTimestamp = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
+    const hourInMs = 60 * 60 * 1000;
+    const forecastHour = (appState.selectedTimestamp - runTimestamp) / hourInMs;
+
+    if (GFS_PRODUCT_TYPE === 'pgrb2.0p25' && forecastHour < 120) {
+        domElements.timelineSlider.step = hourInMs; // 1 hour
+    } else {
+        domElements.timelineSlider.step = hourInMs * 3; // 3 hours
+    }
+}
+
+
 // --- CORE APPLICATION LOGIC ---
 
 /**
@@ -209,12 +250,8 @@ async function fetchAndDisplayData() {
     try {
         const runTimestamp = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
         
+        // The selectedTimestamp is now guaranteed to be on a valid step.
         let forecastHour = Math.round((appState.selectedTimestamp - runTimestamp) / (60 * 60 * 1000));
-        
-        // For the 0.25 deg product, snap to the nearest valid forecast hour.
-        if (GFS_PRODUCT_TYPE !== 'pgrb2.0p25' || forecastHour > 120) {
-            forecastHour = Math.round(forecastHour / 3) * 3;
-        }
 
         const dateStr = appState.gfsRun.date.toISOString().slice(0, 10).replace(/-/g, '');
         const cycleStr = appState.gfsRun.cycle.toString().padStart(2, '0');
@@ -332,15 +369,26 @@ function populateProductSelector() {
 
 function setupTimeSlider() {
     const startTime = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
-    // Extend forecast range to 168 hours (7 days)
-    const endTime = startTime + (168 * 60 * 60 * 1000);
-    // The step is now 1 hour to support the 0.25deg hourly data.
-    const step = 1 * 60 * 60 * 1000;
+    const endTime = startTime + (168 * 60 * 60 * 1000); // 7-day forecast
+    
+    // Calculate the initial forecast time closest to the user's current time.
+    const now = Date.now();
+    let initialTime = startTime;
+    if (now > startTime) {
+        // Snap the current time to the nearest valid forecast step.
+        initialTime = getSnappedTimestamp(now);
+    }
+    
+    // Ensure the initial time does not exceed the forecast range.
+    initialTime = Math.min(initialTime, endTime);
+
     domElements.timelineSlider.min = startTime;
     domElements.timelineSlider.max = endTime;
-    domElements.timelineSlider.step = step;
-    domElements.timelineSlider.value = startTime;
-    appState.selectedTimestamp = startTime;
+    
+    appState.selectedTimestamp = initialTime;
+    domElements.timelineSlider.value = initialTime;
+    
+    updateTimelineStep(); // Set the initial correct step
     updateTimeDisplay();
 }
 
@@ -357,44 +405,37 @@ function updateTimeDisplay() {
     }
 }
 
-function getStepMilliseconds() {
-    const runTimestamp = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
-    const currentHour = (appState.selectedTimestamp - runTimestamp) / (60 * 60 * 1000);
-    const hourInMs = 60 * 60 * 1000;
-
-    if (GFS_PRODUCT_TYPE === 'pgrb2.0p25' && currentHour < 120) {
-        return 1 * hourInMs;
-    }
-    return 3 * hourInMs;
-}
-
 function setupEventListeners() {
-    // Main UI Listeners
+    // Fires continuously while the user drags the slider.
     domElements.timelineSlider.addEventListener('input', () => {
         appState.selectedTimestamp = parseInt(domElements.timelineSlider.value);
+        updateTimelineStep(); // Update step dynamically for 0.25deg product
         updateTimeDisplay();
     });
 
-    domElements.loadForecastBtn.addEventListener('click', () => fetchAndDisplayData());
+    domElements.loadForecastBtn.addEventListener('click', () => {
+        // Snap the timestamp before loading
+        const snappedTime = getSnappedTimestamp(appState.selectedTimestamp);
+        appState.selectedTimestamp = snappedTime;
+        domElements.timelineSlider.value = snappedTime;
+        updateTimeDisplay();
+        fetchAndDisplayData();
+    });
 
     const stepTime = (direction) => {
-        const slider = domElements.timelineSlider;
-        const step = getStepMilliseconds();
-        const currentValue = parseInt(slider.value, 10);
+        const currentStep = parseInt(domElements.timelineSlider.step, 10);
+        const currentValue = parseInt(domElements.timelineSlider.value, 10);
         
-        // For 3-hour steps, snap to the nearest 3-hour mark before stepping
-        let baseValue = currentValue;
-        if (step > (60 * 60 * 1000)) {
-            const runTimestamp = appState.gfsRun.date.getTime() + (appState.gfsRun.cycle * 60 * 60 * 1000);
-            const currentHour = (currentValue - runTimestamp) / (60 * 60 * 1000);
-            const snappedHour = Math.round(currentHour / 3) * 3;
-            baseValue = runTimestamp + (snappedHour * 60 * 60 * 1000);
-        }
+        // Ensure current value is on a valid step before adding/subtracting
+        const snappedValue = getSnappedTimestamp(currentValue);
 
-        const newValue = baseValue + (step * direction);
+        let newTimestamp = snappedValue + (direction * currentStep);
         
-        slider.value = newValue;
-        appState.selectedTimestamp = newValue;
+        // After stepping, snap again in case we crossed the 120h boundary
+        newTimestamp = getSnappedTimestamp(newTimestamp);
+
+        domElements.timelineSlider.value = newTimestamp;
+        appState.selectedTimestamp = newTimestamp;
         updateTimeDisplay();
         fetchAndDisplayData();
     };
@@ -413,9 +454,13 @@ function setupEventListeners() {
             const newTimestamp = runTimestamp + (productInfo.minForecastHour * 60 * 60 * 1000);
             appState.selectedTimestamp = newTimestamp;
             domElements.timelineSlider.value = newTimestamp;
-            updateTimeDisplay();
         }
         
+        updateTimelineStep(); // Update step based on new product
+        const snappedTime = getSnappedTimestamp(appState.selectedTimestamp);
+        appState.selectedTimestamp = snappedTime;
+        domElements.timelineSlider.value = snappedTime;
+        updateTimeDisplay();
         fetchAndDisplayData();
     });
 

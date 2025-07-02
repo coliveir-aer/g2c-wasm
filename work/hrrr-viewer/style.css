@@ -4,35 +4,70 @@ html, body {
     padding: 0;
     height: 100%;
     width: 100%;
-    overflow: hidden; /* Prevent scrollbars on the page */
+    overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #333; /* Dark background for the page */
 }
 
-/* --- Map Container --- */
+/* --- Main Canvas Container --- */
 #map {
-    height: 100%;
-    width: 100%;
-    background-color: #aadaff;
-    /* A light blue to show while tiles load */
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
-/* --- UI Control Styling --- */
-.leaflet-control {
-    background-color: rgba(255, 255, 255, 0.85);
+#map canvas {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    background-color: #000;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    border-radius: 4px;
+}
+
+/* --- UI Controls Container --- */
+#ui-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    pointer-events: none; /* Allow clicks to pass through to the canvas if needed */
+}
+
+/* --- Individual UI Control Styling --- */
+#product-control, #forecast-display, #bottom-bar, .info.legend {
+    background-color: rgba(30, 30, 30, 0.85);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px); /* For Safari */
     border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
     padding: 10px;
-    border: 1px solid rgba(0,0,0,0.1);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #f0f0f0;
+    pointer-events: all; /* Make UI elements clickable */
 }
 
-/* --- New Control Positioning --- */
 #product-control {
     position: absolute;
     top: 10px;
     left: 10px;
-    z-index: 1000;
+}
+
+#product-selector {
+    background-color: #444;
+    color: #f0f0f0;
+    border: 1px solid #666;
+    border-radius: 4px;
+    padding: 4px 8px;
 }
 
 #forecast-display {
@@ -40,7 +75,6 @@ html, body {
     top: 10px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 1000;
     padding: 5px 15px;
 }
 
@@ -64,12 +98,10 @@ html, body {
     transform: translateX(-50%);
     width: 95%;
     max-width: 1200px;
-    z-index: 1000;
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 5px 10px;
-    background-color: rgba(255, 255, 255, 0.75);
 }
 
 #timeline-slider {
@@ -77,44 +109,31 @@ html, body {
     cursor: pointer;
 }
 
-.time-step-btn {
-    font-size: 1.2em;
-    font-weight: bold;
-    padding: 0 10px;
-    height: 30px;
-    border: 1px solid #ccc;
-    background: #fff;
-    border-radius: 5px;
-    cursor: pointer;
-    line-height: 1;
-}
-
-.time-step-btn:hover {
-    background-color: #f0f0f0;
-}
-
-.load-btn {
-    font-size: 0.9em;
+.time-step-btn, .load-btn {
+    font-size: 1.1em;
     font-weight: bold;
     padding: 0 12px;
     height: 30px;
-    border: 1px solid #0078a8;
-    background: #008fca;
+    border: 1px solid #666;
+    background: #555;
     color: white;
     border-radius: 5px;
     cursor: pointer;
+    line-height: 1;
+    transition: background-color 0.2s;
 }
-.load-btn:hover {
-    background: #0078a8;
+
+.time-step-btn:hover, .load-btn:hover {
+    background-color: #777;
 }
 
 /* --- Color Bar Legend --- */
 .info.legend {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
     width: auto;
-    background: rgba(255, 255, 255, 0.85);
-    padding: 10px;
-    border-radius: 8px;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.2);
 }
 .legend-title {
     margin: 0 0 8px 0;
@@ -141,44 +160,6 @@ html, body {
     text-align: right;
 }
 
-/* --- City Temperature Markers --- */
-.city-marker-container {
-    position: relative;
-    pointer-events: none; /* Allows clicks to pass through */
-}
-
-.city-dot {
-    position: absolute;
-    width: 8px;
-    height: 8px;
-    left: 0;
-    top: 0;
-    background-color: #fff;
-    border: 1.5px solid #000;
-    border-radius: 50%;
-    box-shadow: 0 0 2px rgba(0,0,0,0.5);
-}
-
-.city-label {
-    position: absolute;
-    left: 14px; /* Position to the right of the dot */
-    top: -8px; /* Vertically center the label text */
-    background-color: rgba(0, 0, 0, 0.55);
-    color: #fff;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
-    text-shadow: 1px 1px 1px rgba(0,0,0,0.7);
-}
-
-
-/* --- Custom Map Panes --- */
-.leaflet-pane.leaflet-city-labels-pane {
-    pointer-events: none;
-}
-
 /* --- Time Zone Toggle Switch --- */
 #time-toggle {
     display: flex;
@@ -189,12 +170,12 @@ html, body {
 .toggle-label {
     font-size: 11px;
     font-weight: 600;
-    color: #6b7280;
+    color: #999;
     transition: color 0.2s ease-in-out;
 }
 
 .toggle-label.active {
-    color: #111827;
+    color: #fff;
 }
 
 .switch {
@@ -218,7 +199,6 @@ html, body {
     right: 0;
     bottom: 0;
     background-color: #ccc;
-    -webkit-transition: .4s;
     transition: .4s;
 }
 
@@ -238,7 +218,6 @@ html, body {
     left: 3px;
     bottom: 3px;
     background-color: white;
-    -webkit-transition: .4s;
     transition: .4s;
 }
 
@@ -247,16 +226,5 @@ input:checked + .slider {
 }
 
 input:checked + .slider:before {
-    -webkit-transform: translateX(18px);
-    -ms-transform: translateX(18px);
     transform: translateX(18px);
-}
-
-/* --- Repositioned Color Bar --- */
-.leaflet-bottom.leaflet-right {
-    display: flex;
-    flex-direction: column-reverse;
-    top: 50%;
-    transform: translateY(-50%);
-    bottom: auto !important; /* Override Leaflet's inline style */
 }

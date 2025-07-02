@@ -1,8 +1,8 @@
 // /work/viewer/colorbar.js
 
 /**
- * Creates or updates a color bar legend on the map.
- * @param {L.Map} map - The Leaflet map instance.
+ * Creates or updates a color bar legend and appends it to a DOM container.
+ * @param {HTMLElement} container - The DOM element to append the color bar to.
  * @param {Function} colorScale - The function used to generate colors from values.
  * @param {number} minValue - The minimum value of the data range.
  * @param {number} maxValue - The maximum value of the data range.
@@ -10,72 +10,62 @@
  * @param {string} unit - The unit of the data values.
  * @param {number|null} labelIncrement - The increment for labels, or null for dynamic.
  */
-export function updateColorBar(map, colorScale, minValue, maxValue, productName, unit, labelIncrement) {
-    let colorBar = map.colorBar;
+export function updateColorBar(container, colorScale, minValue, maxValue, productName, unit, labelIncrement) {
+    let colorBarDiv = container.querySelector('.info.legend');
 
-    if (!colorBar) {
-        colorBar = L.control({ position: 'bottomright' });
-
-        colorBar.onAdd = function (map) {
-            const div = L.DomUtil.create('div', 'info legend');
-            this._div = div;
-            this.update(colorScale, minValue, maxValue, productName, unit, labelIncrement);
-            return div;
-        };
-
-        colorBar.update = function (scale, min, max, name, unit, increment) {
-            const div = this._div;
-            const range = max - min;
-
-            div.innerHTML = `<h4 class="legend-title">${name} (${unit})</h4>`;
-            
-            const legendBody = document.createElement('div');
-            legendBody.className = 'legend-body';
-
-            const gradient = document.createElement('div');
-            gradient.className = 'legend-gradient';
-
-            let gradientCss = 'linear-gradient(to top';
-            for (let i = 0; i <= 100; i++) {
-                const value = min + (i / 100) * range;
-                const color = scale(value);
-                if (color) {
-                    gradientCss += `, rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-                }
-            }
-            gradientCss += ')';
-            gradient.style.background = gradientCss;
-            
-            const labels = document.createElement('div');
-            labels.className = 'legend-labels';
-            labels.innerHTML = ''; // Clear previous labels
-
-            if (increment) {
-                // Generate labels at fixed increments
-                for (let value = max; value >= min; value -= increment) {
-                    const label = document.createElement('span');
-                    label.textContent = Math.round(value);
-                    labels.appendChild(label);
-                }
-            } else {
-                // Generate a fixed number of evenly spaced labels
-                const numLabels = 10;
-                for (let i = 0; i <= numLabels; i++) {
-                    const value = max - (i / numLabels) * range;
-                    const label = document.createElement('span');
-                    label.textContent = Math.round(value);
-                    labels.appendChild(label);
-                }
-            }
-            
-            legendBody.appendChild(gradient);
-            legendBody.appendChild(labels);
-            div.appendChild(legendBody);
-        };
-
-        map.colorBar = colorBar;
-        colorBar.addTo(map);
+    // If the color bar doesn't exist, create it.
+    if (!colorBarDiv) {
+        colorBarDiv = document.createElement('div');
+        colorBarDiv.className = 'info legend';
+        container.appendChild(colorBarDiv);
     }
 
-    colorBar.update(colorScale, minValue, maxValue, productName, unit, labelIncrement);
+    const range = maxValue - minValue;
+
+    // Set the title
+    colorBarDiv.innerHTML = `<h4 class="legend-title">${productName} (${unit})</h4>`;
+    
+    const legendBody = document.createElement('div');
+    legendBody.className = 'legend-body';
+
+    const gradient = document.createElement('div');
+    gradient.className = 'legend-gradient';
+
+    // Generate the CSS for the color gradient
+    let gradientCss = 'linear-gradient(to top';
+    for (let i = 0; i <= 100; i++) {
+        const value = minValue + (i / 100) * range;
+        const color = colorScale(value);
+        if (color) {
+            gradientCss += `, rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+        }
+    }
+    gradientCss += ')';
+    gradient.style.background = gradientCss;
+    
+    const labels = document.createElement('div');
+    labels.className = 'legend-labels';
+    labels.innerHTML = ''; // Clear previous labels
+
+    // Generate labels based on the specified increment
+    if (labelIncrement) {
+        for (let value = maxValue; value >= minValue; value -= labelIncrement) {
+            const label = document.createElement('span');
+            label.textContent = Math.round(value);
+            labels.appendChild(label);
+        }
+    } else {
+        // Fallback to a fixed number of labels if no increment is provided
+        const numLabels = 10;
+        for (let i = 0; i <= numLabels; i++) {
+            const value = maxValue - (i / numLabels) * range;
+            const label = document.createElement('span');
+            label.textContent = Math.round(value);
+            labels.appendChild(label);
+        }
+    }
+    
+    legendBody.appendChild(gradient);
+    legendBody.appendChild(labels);
+    colorBarDiv.appendChild(legendBody);
 }

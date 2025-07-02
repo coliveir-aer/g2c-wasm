@@ -6,13 +6,6 @@ const S3_BUCKET_URL = 'https://noaa-hrrr-bdp-pds.s3.amazonaws.com/';
 // The HRRR product type to be used. 'wrfsfc' is 2D surface fields.
 const HRRR_PRODUCT_TYPE = 'wrfsfc'; 
 
-// Define the corner points of the HRRR grid in its native projection (meters).
-// These values are specific to the HRRR CONUS grid and are derived from its definition.
-const hrrr_proj_extents = {
-    southwest: [-2786000, -1640000],
-    northeast: [2698000, 1468000]
-};
-
 // Definition of the weather products we want to make available.
 const AVAILABLE_PRODUCTS = {
     'reflectivity_comp': {
@@ -90,18 +83,17 @@ const AVAILABLE_PRODUCTS = {
 
 // --- MODULE IMPORTS ---
 import { updateColorBar } from './colorbar.js';
-import { loadCityData, updateCityMarkers, clearCityMarkers } from './cities.js';
+import { loadCityData, drawCityMarkers } from './cities.js';
 
 // --- APPLICATION STATE ---
 const appState = {
     hrrrRun: { date: null, cycle: -1 },
     selectedTimestamp: 0,
     selectedProduct: 'reflectivity_comp',
-    map: null,
-    dataOverlay: null,
     isFetching: false,
     lastDecodedData: null,
     timeDisplayMode: 'local', // 'local' or 'utc'
+    statesGeoJSON: null,
 };
 
 
@@ -116,90 +108,82 @@ const domElements = {
     loadForecastBtn: document.getElementById('load-forecast-btn'),
 };
 
+// --- CUSTOM PROJECTION LOGIC ---
+const projection = (function() {
+    // Official HRRR Projection Parameters from NOAA.
+    const R = 6371229;    // Radius of the Earth in meters
+    const lat_1 = 25.0;   // Standard parallel
+    const lon_0 = -97.5;  // Central meridian
+    const lat_0 = 38.5;   // Latitude of origin
+
+    const deg2rad = Math.PI / 180;
+
+    const n = Math.sin(lat_1 * deg2rad);
+    const F = (Math.cos(lat_1 * deg2rad) * Math.pow(Math.tan(Math.PI / 4 + (lat_1 * deg2rad) / 2), n)) / n;
+    const rho_0 = R * F / Math.pow(Math.tan(Math.PI / 4 + (lat_0 * deg2rad) / 2), n);
+
+    // Grid properties
+    const nx = 1799;
+    const ny = 1059;
+    const dx = 3000;
+    const dy = 3000;
+    
+    // Coordinates of the first grid point (bottom-left corner) in meters, which is the origin of the grid.
+    const x_origin = -2697000.0;
+    const y_origin = -1587000.0;
+
+    return function(lonlat) {
+        const lon = lonlat[0];
+        const lat = lonlat[1];
+
+        const rho = R * F / Math.pow(Math.tan(Math.PI / 4 + (lat * deg2rad) / 2), n);
+        const theta = n * ((lon - lon_0) * deg2rad);
+
+        // Calculate projected coordinates relative to the projection's center
+        const x = rho * Math.sin(theta);
+        const y = rho_0 - rho * Math.cos(theta);
+
+        // Translate coordinates to be relative to the grid's bottom-left origin, then find the pixel.
+        const i = (x - x_origin) / dx;
+        const j = (y - y_origin) / dy;
+
+        // The grid y-coordinate is inverted relative to the canvas y-coordinate.
+        return [i, ny - j];
+    };
+})();
+
 
 // --- TIME-STEPPING HELPER ---
 
-/**
- * Snaps a given timestamp to the nearest valid HRRR forecast interval.
- * @param {number} timestamp - The timestamp to snap.
- * @returns {number} The snapped timestamp.
- */
 function getSnappedTimestamp(timestamp) {
     const runTimestamp = appState.hrrrRun.date.getTime() + (appState.hrrrRun.cycle * 60 * 60 * 1000);
     const hourInMs = 60 * 60 * 1000;
-    
     const forecastHour = (timestamp - runTimestamp) / hourInMs;
-    // HRRR is hourly
     const snappedHour = Math.round(forecastHour);
-    
     return runTimestamp + (snappedHour * hourInMs);
 }
 
-/**
- * Updates the step attribute of the timeline slider. HRRR is always hourly.
- */
 function updateTimelineStep() {
-    const hourInMs = 60 * 60 * 1000;
-    domElements.timelineSlider.step = hourInMs; // 1 hour
+    domElements.timelineSlider.step = 60 * 60 * 1000; // 1 hour
 }
 
 
 // --- CORE APPLICATION LOGIC ---
 
-/**
- * Initializes the entire application.
- */
 async function initializeApp() {
     console.log('Initializing application...');
-    const mapContainer = document.getElementById('map');
-    console.log(`Map container dimensions before init: ${mapContainer.offsetWidth}x${mapContainer.offsetHeight}`);
-
-    // Define the HRRR Lambert Conformal projection using its Proj4 string.
-    const hrrrProjection = '+proj=lcc +lat_1=25.0 +lat_2=25.0 +lat_0=25.0 +lon_0=-95.0 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs';
-
-    // Define the coordinate bounds of the HRRR grid in its native projection units (meters).
-    const hrrrProjectedBounds = L.bounds(
-        L.point(hrrr_proj_extents.southwest[0], hrrr_proj_extents.southwest[1]),
-        L.point(hrrr_proj_extents.northeast[0], hrrr_proj_extents.northeast[1])
-    );
-
-    // Convert the projected bounds to Lat/Lon for Leaflet's 'maxBounds' option.
-    const southwest_ll = proj4(hrrrProjection, 'WGS84', hrrr_proj_extents.southwest);
-    const northeast_ll = proj4(hrrrProjection, 'WGS84', hrrr_proj_extents.northeast);
-    const hrrrLatLngBounds = L.latLngBounds(
-        L.latLng(southwest_ll[1], southwest_ll[0]),
-        L.latLng(northeast_ll[1], northeast_ll[0])
-    );
-
-    // Create a new Leaflet Coordinate Reference System (CRS) using the Proj4 definition.
-    const crs = new L.Proj.CRS('EPSG:32767', hrrrProjection, {
-        resolutions: [ 8192, 4096, 2048, 1024, 512, 256, 128 ],
-        bounds: hrrrProjectedBounds
-    });
-
-    // Initialize Leaflet map with the custom HRRR projection and constrained bounds.
-    appState.map = L.map(domElements.map, {
-        crs: crs,
-        zoomControl: false, 
-        attributionControl: false,
-        maxBounds: hrrrLatLngBounds, // Restrict panning to the data area
-        maxBoundsViscosity: 1.0,     // Make the bounds solid
-    }); 
-    
-    // Set the initial view to a standard center/zoom for the CONUS.
-    appState.map.setView([39.8, -98.5], 0);
-    
-    // Use a standard OpenStreetMap tile layer. Proj4Leaflet will handle the reprojection.
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(appState.map);
-    
-    L.control.zoom({ position: 'topright' }).addTo(appState.map);
-    
-    appState.map.createPane('cityLabels');
-    appState.map.getPane('cityLabels').style.zIndex = 650;
-    
     await loadCityData();
+    
+    try {
+        // Fetch high-resolution state boundaries from a reliable online source.
+        const response = await fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces_lakes.geojson');
+        const allStates = await response.json();
+        // Filter the GeoJSON to only include US states.
+        allStates.features = allStates.features.filter(feature => feature.properties.iso_a2 === 'US');
+        appState.statesGeoJSON = allStates;
+    } catch (e) {
+        console.error("Failed to load states.json from external source:", e);
+    }
 
     const latestRun = await findLatestHrrrRun();
     if (!latestRun) {
@@ -215,22 +199,15 @@ async function initializeApp() {
     fetchAndDisplayData();
 }
 
-/**
- * Probes the S3 bucket to find the most recent HRRR model run.
- */
 async function findLatestHrrrRun() {
-    let currentDate = new Date(); // Start with the current time
-    // Check for a file at hour 18 to have high confidence the run is complete.
+    let currentDate = new Date();
     const checkHour = 'f18'; 
-
-    for (let i = 0; i < 48; i++) { // Check back up to 48 hours
+    for (let i = 0; i < 48; i++) {
         const dateStr = currentDate.toISOString().slice(0, 10).replace(/-/g, '');
         const cycle = currentDate.getUTCHours();
         const cycleStr = cycle.toString().padStart(2, '0');
-        
         const testUrl = `${S3_BUCKET_URL}hrrr.${dateStr}/conus/hrrr.t${cycleStr}z.${HRRR_PRODUCT_TYPE}${checkHour}.grib2.idx`;
         console.log(`Checking for run: ${testUrl}`);
-        
         try {
             const response = await fetch(testUrl, { method: 'GET', headers: { 'Range': 'bytes=0-0' } });
             if (response.status === 206) {
@@ -240,17 +217,11 @@ async function findLatestHrrrRun() {
         } catch (e) {
             console.warn(`Request for ${testUrl} failed, likely does not exist.`, e);
         }
-        
-        // Go back one hour
         currentDate.setUTCHours(currentDate.getUTCHours() - 1);
     }
     return null;
 }
 
-
-/**
- * Main function to orchestrate fetching and rendering data.
- */
 async function fetchAndDisplayData() {
     if (appState.isFetching) {
         console.warn('Already fetching data, new request ignored.');
@@ -258,21 +229,17 @@ async function fetchAndDisplayData() {
     }
     appState.isFetching = true;
     console.log('Fetching data...');
-
     try {
         const runTimestamp = appState.hrrrRun.date.getTime() + (appState.hrrrRun.cycle * 60 * 60 * 1000);
         let forecastHour = Math.round((appState.selectedTimestamp - runTimestamp) / (60 * 60 * 1000));
-
         const dateStr = appState.hrrrRun.date.toISOString().slice(0, 10).replace(/-/g, '');
         const cycleStr = appState.hrrrRun.cycle.toString().padStart(2, '0');
-        const hourStr = forecastHour.toString().padStart(2, '0'); // HRRR uses 2 digits for forecast hour
-        
+        const hourStr = forecastHour.toString().padStart(2, '0');
         const fileName = `hrrr.t${cycleStr}z.${HRRR_PRODUCT_TYPE}f${hourStr}.grib2`;
         const dataPath = `hrrr.${dateStr}/conus/${fileName}`;
         const idxUrl = `${S3_BUCKET_URL}${dataPath}.idx`;
         const gribUrl = `${S3_BUCKET_URL}${dataPath}`;
 
-        console.log('Fetching GRIB index...');
         const idxResponse = await fetch(idxUrl);
         if (!idxResponse.ok) throw new Error(`Could not fetch index for F${hourStr}: ${idxResponse.statusText}`);
         const indexText = await idxResponse.text();
@@ -281,36 +248,24 @@ async function fetchAndDisplayData() {
         const byteRange = findMessageInIndex(indexText, productInfo);
         if (!byteRange) throw new Error(`Could not find ${productInfo.name} in index file for F${hourStr}.`);
 
-        console.log('Fetching GRIB message...');
-        const gribResponse = await fetch(gribUrl, {
-            headers: { 'Range': `bytes=${byteRange.start}-${byteRange.end}` }
-        });
+        const gribResponse = await fetch(gribUrl, { headers: { 'Range': `bytes=${byteRange.start}-${byteRange.end}` } });
         if (!gribResponse.ok) throw new Error(`Byte range fetch failed for F${hourStr}: ${gribResponse.statusText}`);
+        
         const gribMessageBuffer = await gribResponse.arrayBuffer();
-
-        console.log('Decoding with WASM...');
         const decodedData = processGribData(gribMessageBuffer);
         if (!decodedData) throw new Error('WASM module failed to decode data.');
         
         appState.lastDecodedData = decodedData;
-        
-        console.log('Rendering map overlay...');
-        await renderDataOnMap(decodedData);
-        
+        await renderDataOnCanvas(decodedData);
         console.log(`Displaying HRRR Run: ${new Date(runTimestamp).toUTCString()}`);
-
     } catch (error) {
         console.error('Error in fetchAndDisplayData:', error);
         appState.lastDecodedData = null;
-        clearCityMarkers();
     } finally {
         appState.isFetching = false;
     }
 }
 
-/**
- * Searches the GRIB index file text for a specific product and level.
- */
 function findMessageInIndex(indexText, productInfo) {
     const lines = indexText.split('\n');
     const startBytes = lines.map(line => parseInt(line.split(':')[1], 10));
@@ -318,9 +273,7 @@ function findMessageInIndex(indexText, productInfo) {
         const fields = line.split(':');
         return fields.length > 4 && fields[3] === productInfo.product && fields[4] === productInfo.level;
     });
-
     if (targetLineIndex === -1) return null;
-
     const startByte = startBytes[targetLineIndex];
     let endByte = '';
     for (let i = targetLineIndex + 1; i < startBytes.length; i++) {
@@ -332,22 +285,13 @@ function findMessageInIndex(indexText, productInfo) {
     return { start: startByte, end: endByte };
 }
 
-/**
- * Uses the WASM module to decode a GRIB message buffer.
- */
 function processGribData(gribMessageBuffer) {
     const dataPtr = Module._malloc(gribMessageBuffer.byteLength);
-    if (!dataPtr) {
-        console.error("WASM _malloc failed.");
-        return null;
-    }
+    if (!dataPtr) { console.error("WASM _malloc failed."); return null; }
     try {
         Module.HEAPU8.set(new Uint8Array(gribMessageBuffer), dataPtr);
         const resultPtr = Module.ccall('process_grib_field', 'number', ['number', 'number', 'number'], [dataPtr, gribMessageBuffer.byteLength, 1]);
-        if (!resultPtr) {
-            console.error("C function 'process_grib_field' returned a NULL pointer.");
-            return null;
-        }
+        if (!resultPtr) { console.error("C function 'process_grib_field' returned a NULL pointer."); return null; }
         const metadataJsonPtr = Module.getValue(resultPtr, '*');
         const metadataLen = Module.getValue(resultPtr + 4, 'i32');
         const dataPtr_ = Module.getValue(resultPtr + 8, '*');
@@ -378,59 +322,29 @@ function populateProductSelector() {
 
 function setupTimeSlider() {
     const startTime = appState.hrrrRun.date.getTime() + (appState.hrrrRun.cycle * 60 * 60 * 1000);
-    const endTime = startTime + (48 * 60 * 60 * 1000); // 48-hour forecast for HRRR
-    
+    const endTime = startTime + (48 * 60 * 60 * 1000);
     const now = Date.now();
     let initialTime = startTime;
-    if (now > startTime) {
-        initialTime = getSnappedTimestamp(now);
-    }
-    
+    if (now > startTime) initialTime = getSnappedTimestamp(now);
     initialTime = Math.min(initialTime, endTime);
-
     domElements.timelineSlider.min = startTime;
     domElements.timelineSlider.max = endTime;
-    
     appState.selectedTimestamp = initialTime;
     domElements.timelineSlider.value = initialTime;
-    
     updateTimelineStep();
     updateTimeDisplay();
 }
 
 function updateTimeDisplay() {
     const selectedDate = new Date(parseInt(domElements.timelineSlider.value));
-    
-    let timeString;
-    if (appState.timeDisplayMode === 'local') {
-        const options = {
-            weekday: 'short', month: 'short', day: 'numeric', 
-            hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
-        };
-        timeString = selectedDate.toLocaleString(undefined, options);
-    } else {
-        timeString = selectedDate.toUTCString();
-    }
-
-    domElements.forecastDisplay.innerHTML = `
-        <div id="forecast-display-content">
-            <span id="forecast-hour-display">${timeString}</span>
-            <div id="time-toggle">
-                <span class="toggle-label toggle-label-local">Local</span>
-                <label class="switch">
-                    <input type="checkbox" id="time-zone-toggle">
-                    <span class="slider round"></span>
-                </label>
-                <span class="toggle-label toggle-label-utc">UTC</span>
-            </div>
-        </div>
-    `;
-
+    let timeString = appState.timeDisplayMode === 'local' ?
+        selectedDate.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) :
+        selectedDate.toUTCString();
+    domElements.forecastDisplay.innerHTML = `<div id="forecast-display-content"><span id="forecast-hour-display">${timeString}</span><div id="time-toggle"><span class="toggle-label toggle-label-local">Local</span><label class="switch"><input type="checkbox" id="time-zone-toggle"><span class="slider round"></span></label><span class="toggle-label toggle-label-utc">UTC</span></div></div>`;
     const toggle = document.getElementById('time-zone-toggle');
     toggle.checked = appState.timeDisplayMode === 'utc';
     document.querySelector('.toggle-label-local').classList.toggle('active', appState.timeDisplayMode === 'local');
     document.querySelector('.toggle-label-utc').classList.toggle('active', appState.timeDisplayMode === 'utc');
-    
     toggle.addEventListener('change', (e) => {
         appState.timeDisplayMode = e.target.checked ? 'utc' : 'local';
         updateTimeDisplay();
@@ -442,7 +356,6 @@ function setupEventListeners() {
         appState.selectedTimestamp = parseInt(domElements.timelineSlider.value);
         updateTimeDisplay();
     });
-
     domElements.loadForecastBtn.addEventListener('click', () => {
         const snappedTime = getSnappedTimestamp(appState.selectedTimestamp);
         appState.selectedTimestamp = snappedTime;
@@ -450,23 +363,15 @@ function setupEventListeners() {
         updateTimeDisplay();
         fetchAndDisplayData();
     });
-
     const stepTime = (direction) => {
-        const currentStep = parseInt(domElements.timelineSlider.step, 10);
-        const currentValue = parseInt(domElements.timelineSlider.value, 10);
-        const snappedValue = getSnappedTimestamp(currentValue);
-        let newTimestamp = snappedValue + (direction * currentStep);
-        newTimestamp = getSnappedTimestamp(newTimestamp);
-
+        const newTimestamp = getSnappedTimestamp(parseInt(domElements.timelineSlider.value, 10) + (direction * parseInt(domElements.timelineSlider.step, 10)));
         domElements.timelineSlider.value = newTimestamp;
         appState.selectedTimestamp = newTimestamp;
         updateTimeDisplay();
         fetchAndDisplayData();
     };
-
     domElements.stepBackwardBtn.addEventListener('click', () => stepTime(-1));
     domElements.stepForwardBtn.addEventListener('click', () => stepTime(1));
-
     domElements.productSelector.addEventListener('change', (e) => {
         appState.selectedProduct = e.target.value;
         const snappedTime = getSnappedTimestamp(appState.selectedTimestamp);
@@ -477,20 +382,13 @@ function setupEventListeners() {
     });
 }
 
-/**
- * Renders the decoded weather data onto a canvas and overlays it on the map.
- * @param {{metadata: object, values: Float32Array}} decodedData - The data from the WASM module.
- */
-async function renderDataOnMap(decodedData) {
-    const { metadata, values } = decodedData;
-    let { nx, ny } = metadata.grid;
+async function renderDataOnCanvas(decodedData) {
+    const nx = 1799;
+    const ny = 1059;
+    const { values } = decodedData;
 
-    // Hardcode the correct HRRR CONUS grid dimensions.
-    nx = 1799;
-    ny = 1059;
-
-    if (!nx || !ny || values.length !== nx * ny) {
-        console.error("Grid dimensions/data length mismatch.", { nx, ny, dataLength: values.length });
+    if (values.length !== nx * ny) {
+        console.error("Data length mismatch.", { expected: nx * ny, received: values.length });
         return;
     }
 
@@ -498,6 +396,11 @@ async function renderDataOnMap(decodedData) {
     canvas.width = nx;
     canvas.height = ny;
     const ctx = canvas.getContext('2d');
+    
+    // Enable anti-aliasing for smoother lines
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     const imageData = ctx.createImageData(nx, ny);
     const productConfig = AVAILABLE_PRODUCTS[appState.selectedProduct];
     const colorScale = productConfig.colorScale;
@@ -511,75 +414,73 @@ async function renderDataOnMap(decodedData) {
             imageData.data[pixelIndex] = color[0];
             imageData.data[pixelIndex + 1] = color[1];
             imageData.data[pixelIndex + 2] = color[2];
-            imageData.data[pixelIndex + 3] = 180;
+            imageData.data[pixelIndex + 3] = 200;
         } else {
-            imageData.data[pixelIndex] = 180;
-            imageData.data[pixelIndex + 1] = 180;
-            imageData.data[pixelIndex + 2] = 180;
-            imageData.data[pixelIndex + 3] = 60;
+            imageData.data[pixelIndex + 3] = 0; // Make non-data transparent
+        }
+    };
+
+    const renderLoop = (transform) => {
+        for (let i = 0; i < values.length; i++) {
+            const y = Math.floor(i / nx);
+            const x = i % nx;
+            const sourceIndex = (ny - 1 - y) * nx + x;
+            processPixel(transform(values[sourceIndex]), i);
         }
     };
 
     if (appState.selectedProduct === 'temp_2m') {
         const kToF = (k) => (k - 273.15) * 9/5 + 32;
-        displayMin = -20;
-        displayMax = 110;
-        displayUnit = '°F';
-        labelIncrement = 10;
-        displayColorScale = (f) => {
-            const clampedF = Math.max(displayMin, Math.min(f, displayMax));
-            const kelvin = (clampedF - 32) * 5/9 + 273.15;
-            return colorScale(kelvin);
-        };
-        // This loop now reads the source data upside down to flip the image correctly.
-        for (let j = 0; j < ny; j++) { // y-coordinate for canvas (top-to-bottom)
-            for (let i = 0; i < nx; i++) { // x-coordinate for canvas (left-to-right)
-                const canvasIndex = (j * nx + i); // Index for the canvas
-                const sourceRow = ny - 1 - j;     // Corresponding row in the source data (bottom-to-top)
-                const sourceIndex = sourceRow * nx + i;
-                processPixel(kToF(values[sourceIndex]), canvasIndex);
-            }
-        }
-    } else { // Default for reflectivity or other products
-        displayMin = 5;
-        displayMax = 75;
-        displayUnit = productConfig.unit;
-        labelIncrement = 10;
-        displayColorScale = (val) => colorScale(Math.max(displayMin, Math.min(val, displayMax)));
-
-        // This loop now reads the source data upside down to flip the image correctly.
-        for (let j = 0; j < ny; j++) { // y-coordinate for canvas (top-to-bottom)
-            for (let i = 0; i < nx; i++) { // x-coordinate for canvas (left-to-right)
-                const canvasIndex = (j * nx + i); // Index for the canvas
-                const sourceRow = ny - 1 - j;     // Corresponding row in the source data (bottom-to-top)
-                const sourceIndex = sourceRow * nx + i;
-                processPixel(values[sourceIndex], canvasIndex);
-            }
-        }
+        displayMin = -20; displayMax = 110; displayUnit = '°F'; labelIncrement = 10;
+        displayColorScale = (f) => colorScale( (f - 32) * 5/9 + 273.15 );
+        renderLoop(kToF);
+    } else {
+        displayMin = 5; displayMax = 75; displayUnit = 'dBZ'; labelIncrement = 10;
+        displayColorScale = (val) => colorScale(val);
+        renderLoop(val => val); // No transform needed for reflectivity
     }
     
     ctx.putImageData(imageData, 0, 0);
-    updateColorBar(appState.map, displayColorScale, displayMin, displayMax, productConfig.name, displayUnit, labelIncrement);
-    
-    const imageUrl = canvas.toDataURL();
 
-    if (appState.dataOverlay) {
-        appState.map.removeLayer(appState.dataOverlay);
+    // Draw state boundaries
+    if (appState.statesGeoJSON) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 1.2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        
+        appState.statesGeoJSON.features.forEach(feature => {
+            const geom = feature.geometry;
+            const drawRing = (ring) => {
+                ctx.beginPath();
+                ring.forEach((point, index) => {
+                    const [x, y] = projection(point);
+                    if (index === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            };
+
+            if (geom.type === 'Polygon') {
+                geom.coordinates.forEach(drawRing);
+            } else if (geom.type === 'MultiPolygon') {
+                geom.coordinates.forEach(polygon => polygon.forEach(drawRing));
+            }
+        });
     }
-    
-    const projectedBounds = L.bounds(
-        L.point(hrrr_proj_extents.southwest[0], hrrr_proj_extents.southwest[1]),
-        L.point(hrrr_proj_extents.northeast[0], hrrr_proj_extents.northeast[1])
-    );
-    
-    appState.dataOverlay = L.Proj.imageOverlay(imageUrl, projectedBounds, {
-        opacity: 0.7,
-        interactive: false
-    }).addTo(appState.map);
 
-    clearCityMarkers();
+    // Draw city markers if applicable
+    if (appState.selectedProduct === 'temp_2m') {
+        drawCityMarkers(ctx, appState, projection);
+    }
+
+    // Update the colorbar
+    updateColorBar(document.getElementById('ui-container'), displayColorScale, displayMin, displayMax, productConfig.name, displayUnit, labelIncrement);
+    
+    // Display the final canvas
+    domElements.map.innerHTML = '';
+    domElements.map.appendChild(canvas);
 }
-
 
 // --- APPLICATION ENTRY POINT ---
 window.addEventListener('wasmReady', initializeApp);

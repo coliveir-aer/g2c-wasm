@@ -475,10 +475,19 @@ function setupEventListeners() {
  */
 async function renderDataOnMap(decodedData) {
     const { metadata, values } = decodedData;
-    const { nx, ny } = metadata.grid;
+    let { nx, ny } = metadata.grid;
 
-    if (!nx || !ny) {
-        console.error("Invalid grid dimensions:", metadata.grid);
+    // Hardcode the correct HRRR CONUS grid dimensions, as requested.
+    nx = 1799;
+    ny = 1059;
+
+    // Add a check to ensure the decoded data array matches the expected grid size.
+    if (!nx || !ny || values.length !== nx * ny) {
+        console.error("Invalid grid dimensions or data length mismatch:", {
+            nx_expected: nx, 
+            ny_expected: ny, 
+            dataLength: values.length
+        });
         return;
     }
 
@@ -486,51 +495,82 @@ async function renderDataOnMap(decodedData) {
     canvas.width = nx;
     canvas.height = ny;
     const ctx = canvas.getContext('2d');
-    
     const imageData = ctx.createImageData(nx, ny);
     const productConfig = AVAILABLE_PRODUCTS[appState.selectedProduct];
     const colorScale = productConfig.colorScale;
-    
-    // The data is already in the correct grid projection, no remapping needed for HRRR.
-    for (let i = 0; i < values.length; i++) {
-        const color = colorScale(values[i]);
-        const pixelIndex = i * 4;
-        if (color) {
-            imageData.data[pixelIndex] = color[0];
-            imageData.data[pixelIndex + 1] = color[1];
-            imageData.data[pixelIndex + 2] = color[2];
-            imageData.data[pixelIndex + 3] = 180; // Opacity
-        } else {
-            imageData.data[pixelIndex + 3] = 0; // Transparent
+
+    let displayMin, displayMax, displayUnit, displayColorScale, labelIncrement = null;
+
+    if (appState.selectedProduct === 'temp_2m') {
+        const kToF = (k) => (k - 273.15) * 9/5 + 32;
+        displayMin = -20;
+        displayMax = 110;
+        displayUnit = '°F';
+        labelIncrement = 10;
+        displayColorScale = (f) => {
+            const clampedF = Math.max(displayMin, Math.min(f, displayMax));
+            const kelvin = (clampedF - 32) * 5/9 + 273.15;
+            return colorScale(kelvin);
+        };
+        for (let i = 0; i < values.length; i++) {
+            const fahrenheit = kToF(values[i]);
+            const color = displayColorScale(fahrenheit);
+            const pixelIndex = i * 4;
+            if (color) {
+                imageData.data[pixelIndex] = color[0];
+                imageData.data[pixelIndex + 1] = color[1];
+                imageData.data[pixelIndex + 2] = color[2];
+                imageData.data[pixelIndex + 3] = 180;
+            } else {
+                imageData.data[pixelIndex + 3] = 0;
+            }
+        }
+    } else { // Default for reflectivity or other products
+        displayMin = 5;
+        displayMax = 75;
+        displayUnit = productConfig.unit;
+        labelIncrement = 10;
+        displayColorScale = (val) => colorScale(Math.max(displayMin, Math.min(val, displayMax)));
+
+        for (let i = 0; i < values.length; i++) {
+            const color = displayColorScale(values[i]);
+            const pixelIndex = i * 4;
+            if (color) {
+                imageData.data[pixelIndex] = color[0];
+                imageData.data[pixelIndex + 1] = color[1];
+                imageData.data[pixelIndex + 2] = color[2];
+                imageData.data[pixelIndex + 3] = 180; // Set opacity for valid data
+            } else {
+                // For null colors (low values), draw a faint gray to show coverage
+                imageData.data[pixelIndex] = 180;     // R
+                imageData.data[pixelIndex + 1] = 180; // G
+                imageData.data[pixelIndex + 2] = 180; // B
+                imageData.data[pixelIndex + 3] = 60;  // Set a low opacity
+            }
         }
     }
     
     ctx.putImageData(imageData, 0, 0);
+    updateColorBar(appState.map, displayColorScale, displayMin, displayMax, productConfig.name, displayUnit, labelIncrement);
     
-    updateColorBar(appState.map, colorScale, 5, 75, productConfig.name, productConfig.unit, 10);
-    
-    // Use proj4 to transform the projected corner points to Lat/Lon
-    const hrrrProjection = '+proj=lcc +lat_1=25.0 +lat_2=25.0 +lat_0=25.0 +lon_0=-95.0 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs';
-    const southwest_ll = proj4(hrrrProjection, 'WGS84', hrrr_proj_extents.southwest);
-    const northeast_ll = proj4(hrrrProjection, 'WGS84', hrrr_proj_extents.northeast);
-
-    const bounds = L.latLngBounds(
-        [southwest_ll[1], southwest_ll[0]],
-        [northeast_ll[1], northeast_ll[0]]
-    );
-
     const imageUrl = canvas.toDataURL();
 
     if (appState.dataOverlay) {
         appState.map.removeLayer(appState.dataOverlay);
     }
     
-    appState.dataOverlay = L.imageOverlay(imageUrl, bounds, {
+    // Define the bounds in the map's projected coordinate system (meters)
+    const projectedBounds = L.bounds(
+        L.point(hrrr_proj_extents.southwest[0], hrrr_proj_extents.southwest[1]),
+        L.point(hrrr_proj_extents.northeast[0], hrrr_proj_extents.northeast[1])
+    );
+    
+    // Use L.Proj.imageOverlay, which is specifically designed for projected map data
+    appState.dataOverlay = L.Proj.imageOverlay(imageUrl, projectedBounds, {
         opacity: 0.7,
         interactive: false
     }).addTo(appState.map);
 
-    // City markers are not applicable to the HRRR projection in this context.
     clearCityMarkers();
 }
 

@@ -1,4 +1,4 @@
-// /work/viewer/colorbar.js
+// /work/hrrr-viewer/colorbar.js
 
 /**
  * Creates or updates a color bar legend and appends it to a DOM container.

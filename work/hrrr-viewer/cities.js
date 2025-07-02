@@ -1,4 +1,4 @@
-// /work/viewer/cities.js
+// /work/hrrr-viewer/cities.js
 import { projection } from './main.js';
 
 // --- APPLICATION STATE (scoped to this module) ---

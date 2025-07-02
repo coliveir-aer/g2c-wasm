@@ -94,6 +94,13 @@ const appState = {
     lastDecodedData: null,
     timeDisplayMode: 'local', // 'local' or 'utc'
     statesGeoJSON: null,
+    view: {
+        scale: 1,
+        translateX: 0,
+        translateY: 0,
+    },
+    mainCanvas: null,
+    mainContext: null,
 };
 
 
@@ -174,6 +181,8 @@ async function initializeApp() {
         console.error("Failed to load states.json from external source:", e);
     }
 
+    setupPanZoom();
+
     const latestRun = await findLatestHrrrRun();
     if (!latestRun) {
         console.error('Error: Could not find any recent HRRR model runs.');
@@ -190,7 +199,9 @@ async function initializeApp() {
 
 async function findLatestHrrrRun() {
     let currentDate = new Date();
-    const checkHour = 'f18'; 
+    // Start the search 1 hour in the past to increase the chance of finding a complete run.
+    currentDate.setUTCHours(currentDate.getUTCHours() - 1);
+    const checkHour = 'f48'; 
     for (let i = 0; i < 48; i++) {
         const dateStr = currentDate.toISOString().slice(0, 10).replace(/-/g, '');
         const cycle = currentDate.getUTCHours();
@@ -245,7 +256,7 @@ async function fetchAndDisplayData() {
         if (!decodedData) throw new Error('WASM module failed to decode data.');
         
         appState.lastDecodedData = decodedData;
-        await renderDataOnCanvas(decodedData);
+        await renderDataOnCanvas();
         console.log(`Displaying HRRR Run: ${new Date(runTimestamp).toUTCString()}`);
     } catch (error) {
         console.error('Error in fetchAndDisplayData:', error);
@@ -371,29 +382,55 @@ function setupEventListeners() {
     });
 }
 
-async function renderDataOnCanvas(decodedData) {
+async function renderDataOnCanvas() {
+    if (!appState.lastDecodedData) return;
+
     const nx = 1799;
     const ny = 1059;
-    const { values } = decodedData;
+    const { values } = appState.lastDecodedData;
 
     if (values.length !== nx * ny) {
         console.error("Data length mismatch.", { expected: nx * ny, received: values.length });
         return;
     }
 
-    const canvas = document.createElement('canvas');
-    canvas.width = nx;
-    canvas.height = ny;
-    const ctx = canvas.getContext('2d');
-    
-    // Enable anti-aliasing for smoother lines
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    if (!appState.mainCanvas) {
+        appState.mainCanvas = document.createElement('canvas');
+        domElements.map.innerHTML = '';
+        domElements.map.appendChild(appState.mainCanvas);
+        appState.mainContext = appState.mainCanvas.getContext('2d');
+    }
 
-    const imageData = ctx.createImageData(nx, ny);
+    const canvas = appState.mainCanvas;
+    const ctx = appState.mainContext;
+
+    // Resize canvas to fit container while maintaining aspect ratio
+    const container = domElements.map;
+    const ratio = nx / ny;
+    let newWidth = container.clientWidth;
+    let newHeight = newWidth / ratio;
+    if (newHeight > container.clientHeight) {
+        newHeight = container.clientHeight;
+        newWidth = newHeight * ratio;
+    }
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+
+    // Clear canvas and set transform
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(appState.view.translateX, appState.view.translateY);
+    ctx.scale(appState.view.scale, appState.view.scale);
+    
+    // Create an offscreen canvas for the data layer
+    const dataCanvas = document.createElement('canvas');
+    dataCanvas.width = nx;
+    dataCanvas.height = ny;
+    const dataCtx = dataCanvas.getContext('2d');
+    const imageData = dataCtx.createImageData(nx, ny);
+    
     const productConfig = AVAILABLE_PRODUCTS[appState.selectedProduct];
     const colorScale = productConfig.colorScale;
-
     let displayMin, displayMax, displayUnit, displayColorScale, labelIncrement = null;
 
     const processPixel = (value, i) => {
@@ -405,7 +442,7 @@ async function renderDataOnCanvas(decodedData) {
             imageData.data[pixelIndex + 2] = color[2];
             imageData.data[pixelIndex + 3] = 200;
         } else {
-            imageData.data[pixelIndex + 3] = 0; // Make non-data transparent
+            imageData.data[pixelIndex + 3] = 0;
         }
     };
 
@@ -413,7 +450,6 @@ async function renderDataOnCanvas(decodedData) {
         const kToF = (k) => (k - 273.15) * 9/5 + 32;
         displayMin = -20; displayMax = 110; displayUnit = '°F'; labelIncrement = 10;
         displayColorScale = (f) => colorScale( (f - 32) * 5/9 + 273.15 );
-        
         for (let j = 0; j < ny; j++) {
             for (let i = 0; i < nx; i++) {
                 const canvasIndex = j * nx + i;
@@ -424,7 +460,6 @@ async function renderDataOnCanvas(decodedData) {
     } else {
         displayMin = 5; displayMax = 75; displayUnit = 'dBZ'; labelIncrement = 10;
         displayColorScale = (val) => colorScale(val);
-
         for (let j = 0; j < ny; j++) {
             for (let i = 0; i < nx; i++) {
                 const canvasIndex = j * nx + i;
@@ -434,12 +469,13 @@ async function renderDataOnCanvas(decodedData) {
         }
     }
     
-    ctx.putImageData(imageData, 0, 0);
+    dataCtx.putImageData(imageData, 0, 0);
+    ctx.drawImage(dataCanvas, 0, 0);
 
     // Draw state boundaries
     if (appState.statesGeoJSON) {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.2 / appState.view.scale; // Keep line width consistent when zooming
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
         
@@ -463,18 +499,110 @@ async function renderDataOnCanvas(decodedData) {
         });
     }
 
-    // Draw city markers if applicable
+    // Draw city markers
     if (appState.selectedProduct === 'temp_2m') {
         drawCityMarkers(ctx, appState);
     }
 
+    ctx.restore();
+
     // Update the colorbar
     updateColorBar(document.getElementById('ui-container'), displayColorScale, displayMin, displayMax, productConfig.name, displayUnit, labelIncrement);
-    
-    // Display the final canvas
-    domElements.map.innerHTML = '';
-    domElements.map.appendChild(canvas);
 }
+
+function setupPanZoom() {
+    const canvasContainer = domElements.map;
+    let isDragging = false;
+    let lastX, lastY;
+    let pinchStartDist = 0;
+
+    const getEventCoords = (e) => {
+        if (e.touches) {
+            return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }
+        return { x: e.clientX, y: e.clientY };
+    };
+
+    const handlePanStart = (e) => {
+        isDragging = true;
+        const coords = getEventCoords(e);
+        lastX = coords.x;
+        lastY = coords.y;
+        canvasContainer.style.cursor = 'grabbing';
+    };
+
+    const handlePanMove = (e) => {
+        if (!isDragging) return;
+        const coords = getEventCoords(e);
+        const dx = coords.x - lastX;
+        const dy = coords.y - lastY;
+        lastX = coords.x;
+        lastY = coords.y;
+        appState.view.translateX += dx;
+        appState.view.translateY += dy;
+        requestAnimationFrame(renderDataOnCanvas);
+    };
+
+    const handlePanEnd = () => {
+        isDragging = false;
+        canvasContainer.style.cursor = 'grab';
+    };
+
+    const handleZoom = (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        const newScale = Math.max(0.5, Math.min(appState.view.scale + delta, 10));
+        
+        const rect = canvasContainer.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        appState.view.translateX = mouseX - (mouseX - appState.view.translateX) * (newScale / appState.view.scale);
+        appState.view.translateY = mouseY - (mouseY - appState.view.translateY) * (newScale / appState.view.scale);
+        appState.view.scale = newScale;
+
+        requestAnimationFrame(renderDataOnCanvas);
+    };
+    
+    // Mouse events
+    canvasContainer.addEventListener('mousedown', handlePanStart);
+    canvasContainer.addEventListener('mousemove', handlePanMove);
+    canvasContainer.addEventListener('mouseup', handlePanEnd);
+    canvasContainer.addEventListener('mouseleave', handlePanEnd);
+    canvasContainer.addEventListener('wheel', handleZoom);
+
+    // Touch events
+    canvasContainer.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            handlePanStart(e);
+        } else if (e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            pinchStartDist = Math.sqrt(dx * dx + dy * dy);
+        }
+    });
+
+    canvasContainer.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 1) {
+            handlePanMove(e);
+        } else if (e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const pinchEndDist = Math.sqrt(dx * dx + dy * dy);
+            const scaleChange = (pinchEndDist / pinchStartDist);
+            
+            const newScale = Math.max(0.5, Math.min(appState.view.scale * scaleChange, 10));
+            appState.view.scale = newScale;
+            pinchStartDist = pinchEndDist;
+            
+            requestAnimationFrame(renderDataOnCanvas);
+        }
+    });
+
+    canvasContainer.addEventListener('touchend', handlePanEnd);
+}
+
 
 // --- APPLICATION ENTRY POINT ---
 window.addEventListener('wasmReady', initializeApp);

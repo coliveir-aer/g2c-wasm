@@ -158,26 +158,39 @@ async function initializeApp() {
     const hrrrProjection = '+proj=lcc +lat_1=25.0 +lat_2=25.0 +lat_0=25.0 +lon_0=-95.0 +x_0=0 +y_0=0 +a=6371200 +b=6371200 +units=m +no_defs';
 
     // Define the coordinate bounds of the HRRR grid in its native projection units (meters).
-    const hrrrBounds = L.bounds(
+    const hrrrProjectedBounds = L.bounds(
         L.point(hrrr_proj_extents.southwest[0], hrrr_proj_extents.southwest[1]),
         L.point(hrrr_proj_extents.northeast[0], hrrr_proj_extents.northeast[1])
+    );
+
+    // Convert the projected bounds to Lat/Lon for Leaflet's 'maxBounds' option.
+    const southwest_ll = proj4(hrrrProjection, 'WGS84', hrrr_proj_extents.southwest);
+    const northeast_ll = proj4(hrrrProjection, 'WGS84', hrrr_proj_extents.northeast);
+    const hrrrLatLngBounds = L.latLngBounds(
+        L.latLng(southwest_ll[1], southwest_ll[0]),
+        L.latLng(northeast_ll[1], northeast_ll[0])
     );
 
     // Create a new Leaflet Coordinate Reference System (CRS) using the Proj4 definition.
     const crs = new L.Proj.CRS('EPSG:32767', hrrrProjection, {
         resolutions: [ 16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1 ],
-        bounds: hrrrBounds
+        bounds: hrrrProjectedBounds
     });
 
-    // Initialize Leaflet map with the custom HRRR projection.
+    // Initialize Leaflet map with the custom HRRR projection and constrained bounds.
     appState.map = L.map(domElements.map, {
         crs: crs,
-        worldCopyJump: true,
         zoomControl: false, 
         attributionControl: false,
-    }).setView([39.8, -98.5], 3); 
+        maxBounds: hrrrLatLngBounds, // Restrict panning to the data area
+        maxBoundsViscosity: 1.0,     // Make the bounds solid
+        minZoom: 3                   // Prevent zooming out too far
+    }); 
     
-    // Add a compatible WMS tile layer from USGS that supports the necessary projection.
+    // Set the initial view to fit the data bounds perfectly.
+    appState.map.fitBounds(hrrrLatLngBounds);
+    
+    // Re-enable the WMS tile layer now that the projection and bounds are correct.
     L.tileLayer.wms('https://basemap.nationalmap.gov/arcgis/services/USGSTopo/MapServer/WmsServer', {
         layers: '0',
         format: 'image/png',
@@ -477,17 +490,12 @@ async function renderDataOnMap(decodedData) {
     const { metadata, values } = decodedData;
     let { nx, ny } = metadata.grid;
 
-    // Hardcode the correct HRRR CONUS grid dimensions, as requested.
+    // Hardcode the correct HRRR CONUS grid dimensions.
     nx = 1799;
     ny = 1059;
 
-    // Add a check to ensure the decoded data array matches the expected grid size.
     if (!nx || !ny || values.length !== nx * ny) {
-        console.error("Invalid grid dimensions or data length mismatch:", {
-            nx_expected: nx, 
-            ny_expected: ny, 
-            dataLength: values.length
-        });
+        console.error("Grid dimensions/data length mismatch.", { nx, ny, dataLength: values.length });
         return;
     }
 
@@ -501,6 +509,22 @@ async function renderDataOnMap(decodedData) {
 
     let displayMin, displayMax, displayUnit, displayColorScale, labelIncrement = null;
 
+    const processPixel = (value, i) => {
+        const color = displayColorScale(value);
+        const pixelIndex = i * 4;
+        if (color) {
+            imageData.data[pixelIndex] = color[0];
+            imageData.data[pixelIndex + 1] = color[1];
+            imageData.data[pixelIndex + 2] = color[2];
+            imageData.data[pixelIndex + 3] = 180;
+        } else {
+            imageData.data[pixelIndex] = 180;
+            imageData.data[pixelIndex + 1] = 180;
+            imageData.data[pixelIndex + 2] = 180;
+            imageData.data[pixelIndex + 3] = 60;
+        }
+    };
+
     if (appState.selectedProduct === 'temp_2m') {
         const kToF = (k) => (k - 273.15) * 9/5 + 32;
         displayMin = -20;
@@ -512,17 +536,13 @@ async function renderDataOnMap(decodedData) {
             const kelvin = (clampedF - 32) * 5/9 + 273.15;
             return colorScale(kelvin);
         };
-        for (let i = 0; i < values.length; i++) {
-            const fahrenheit = kToF(values[i]);
-            const color = displayColorScale(fahrenheit);
-            const pixelIndex = i * 4;
-            if (color) {
-                imageData.data[pixelIndex] = color[0];
-                imageData.data[pixelIndex + 1] = color[1];
-                imageData.data[pixelIndex + 2] = color[2];
-                imageData.data[pixelIndex + 3] = 180;
-            } else {
-                imageData.data[pixelIndex + 3] = 0;
+        // This loop now reads the source data upside down to flip the image correctly.
+        for (let j = 0; j < ny; j++) { // y-coordinate for canvas (top-to-bottom)
+            for (let i = 0; i < nx; i++) { // x-coordinate for canvas (left-to-right)
+                const canvasIndex = (j * nx + i); // Index for the canvas
+                const sourceRow = ny - 1 - j;     // Corresponding row in the source data (bottom-to-top)
+                const sourceIndex = sourceRow * nx + i;
+                processPixel(kToF(values[sourceIndex]), canvasIndex);
             }
         }
     } else { // Default for reflectivity or other products
@@ -532,20 +552,13 @@ async function renderDataOnMap(decodedData) {
         labelIncrement = 10;
         displayColorScale = (val) => colorScale(Math.max(displayMin, Math.min(val, displayMax)));
 
-        for (let i = 0; i < values.length; i++) {
-            const color = displayColorScale(values[i]);
-            const pixelIndex = i * 4;
-            if (color) {
-                imageData.data[pixelIndex] = color[0];
-                imageData.data[pixelIndex + 1] = color[1];
-                imageData.data[pixelIndex + 2] = color[2];
-                imageData.data[pixelIndex + 3] = 180; // Set opacity for valid data
-            } else {
-                // For null colors (low values), draw a faint gray to show coverage
-                imageData.data[pixelIndex] = 180;     // R
-                imageData.data[pixelIndex + 1] = 180; // G
-                imageData.data[pixelIndex + 2] = 180; // B
-                imageData.data[pixelIndex + 3] = 60;  // Set a low opacity
+        // This loop now reads the source data upside down to flip the image correctly.
+        for (let j = 0; j < ny; j++) { // y-coordinate for canvas (top-to-bottom)
+            for (let i = 0; i < nx; i++) { // x-coordinate for canvas (left-to-right)
+                const canvasIndex = (j * nx + i); // Index for the canvas
+                const sourceRow = ny - 1 - j;     // Corresponding row in the source data (bottom-to-top)
+                const sourceIndex = sourceRow * nx + i;
+                processPixel(values[sourceIndex], canvasIndex);
             }
         }
     }
@@ -559,13 +572,11 @@ async function renderDataOnMap(decodedData) {
         appState.map.removeLayer(appState.dataOverlay);
     }
     
-    // Define the bounds in the map's projected coordinate system (meters)
     const projectedBounds = L.bounds(
         L.point(hrrr_proj_extents.southwest[0], hrrr_proj_extents.southwest[1]),
         L.point(hrrr_proj_extents.northeast[0], hrrr_proj_extents.northeast[1])
     );
     
-    // Use L.Proj.imageOverlay, which is specifically designed for projected map data
     appState.dataOverlay = L.Proj.imageOverlay(imageUrl, projectedBounds, {
         opacity: 0.7,
         interactive: false

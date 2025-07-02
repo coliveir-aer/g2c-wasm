@@ -136,7 +136,7 @@ export const projection = (function() {
         const i = (x - x_origin) / dx;
         const j = (y - y_origin) / dy;
 
-        // Return the pixel coordinates.
+        // The grid y-coordinate is inverted relative to the canvas y-coordinate.
         return [i, ny - j];
     };
 })();
@@ -409,11 +409,11 @@ async function renderDataOnCanvas(decodedData) {
         }
     };
 
-if (appState.selectedProduct === 'temp_2m') {
+    if (appState.selectedProduct === 'temp_2m') {
         const kToF = (k) => (k - 273.15) * 9/5 + 32;
         displayMin = -20; displayMax = 110; displayUnit = '°F'; labelIncrement = 10;
         displayColorScale = (f) => colorScale( (f - 32) * 5/9 + 273.15 );
-
+        
         for (let j = 0; j < ny; j++) {
             for (let i = 0; i < nx; i++) {
                 const canvasIndex = j * nx + i;

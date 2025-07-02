@@ -110,17 +110,11 @@ const domElements = {
 
 // --- CUSTOM PROJECTION LOGIC ---
 export const projection = (function() {
-    // Official HRRR Projection Parameters from NOAA.
-    const R = 6371229;    // Radius of the Earth in meters
-    const lat_1 = 25.0;   // Standard parallel
-    const lon_0 = -97.5;  // Central meridian
-    const lat_0 = 38.5;   // Latitude of origin
-
-    const deg2rad = Math.PI / 180;
-
-    const n = Math.sin(lat_1 * deg2rad);
-    const F = (Math.cos(lat_1 * deg2rad) * Math.pow(Math.tan(Math.PI / 4 + (lat_1 * deg2rad) / 2), n)) / n;
-    const rho_0 = R * F / Math.pow(Math.tan(Math.PI / 4 + (lat_0 * deg2rad) / 2), n);
+    // Define the HRRR projection using the standard Proj4 string.
+    const hrrrProjection = '+proj=lcc +lat_1=38.5 +lat_2=38.5 +lat_0=38.5 +lon_0=-97.5 +x_0=0 +y_0=0 +a=6371229 +b=6371229 +units=m +no_defs';
+    
+    // Create a forward projection function from WGS84 (lat/lon) to HRRR grid coordinates.
+    const proj = proj4('WGS84', hrrrProjection);
 
     // Grid properties
     const nx = 1799;
@@ -128,26 +122,21 @@ export const projection = (function() {
     const dx = 3000;
     const dy = 3000;
     
-    // Coordinates of the first grid point (bottom-left corner) in meters, which is the origin of the grid.
+    // Coordinates of the first grid point (bottom-left corner) in meters.
     const x_origin = -2697000.0;
     const y_origin = -1587000.0;
 
     return function(lonlat) {
-        const lon = lonlat[0];
-        const lat = lonlat[1];
+        // Project the lon/lat point to the HRRR coordinate system (in meters).
+        const projected = proj.forward(lonlat);
+        const x = projected[0];
+        const y = projected[1];
 
-        const rho = R * F / Math.pow(Math.tan(Math.PI / 4 + (lat * deg2rad) / 2), n);
-        const theta = n * ((lon - lon_0) * deg2rad);
-
-        // Calculate projected coordinates relative to the projection's center
-        const x = rho * Math.sin(theta);
-        const y = rho_0 - rho * Math.cos(theta);
-
-        // Translate coordinates to be relative to the grid's bottom-left origin, then find the pixel.
+        // Translate projected coordinates to pixel coordinates on the grid.
         const i = (x - x_origin) / dx;
         const j = (y - y_origin) / dy;
 
-        // The grid y-coordinate is inverted relative to the canvas y-coordinate.
+        // Return the pixel coordinates.
         return [i, ny - j];
     };
 })();
@@ -420,24 +409,29 @@ async function renderDataOnCanvas(decodedData) {
         }
     };
 
-    const renderLoop = (transform) => {
-        for (let i = 0; i < values.length; i++) {
-            const y = Math.floor(i / nx);
-            const x = i % nx;
-            const sourceIndex = (ny - 1 - y) * nx + x;
-            processPixel(transform(values[sourceIndex]), i);
-        }
-    };
-
-    if (appState.selectedProduct === 'temp_2m') {
+if (appState.selectedProduct === 'temp_2m') {
         const kToF = (k) => (k - 273.15) * 9/5 + 32;
         displayMin = -20; displayMax = 110; displayUnit = '°F'; labelIncrement = 10;
         displayColorScale = (f) => colorScale( (f - 32) * 5/9 + 273.15 );
-        renderLoop(kToF);
+
+        for (let j = 0; j < ny; j++) {
+            for (let i = 0; i < nx; i++) {
+                const canvasIndex = j * nx + i;
+                const sourceIndex = (ny - 1 - j) * nx + i;
+                processPixel(kToF(values[sourceIndex]), canvasIndex);
+            }
+        }
     } else {
         displayMin = 5; displayMax = 75; displayUnit = 'dBZ'; labelIncrement = 10;
         displayColorScale = (val) => colorScale(val);
-        renderLoop(val => val);
+
+        for (let j = 0; j < ny; j++) {
+            for (let i = 0; i < nx; i++) {
+                const canvasIndex = j * nx + i;
+                const sourceIndex = (ny - 1 - j) * nx + i;
+                processPixel(values[sourceIndex], canvasIndex);
+            }
+        }
     }
     
     ctx.putImageData(imageData, 0, 0);
@@ -471,7 +465,7 @@ async function renderDataOnCanvas(decodedData) {
 
     // Draw city markers if applicable
     if (appState.selectedProduct === 'temp_2m') {
-        drawCityMarkers(ctx, appState, projection);
+        drawCityMarkers(ctx, appState);
     }
 
     // Update the colorbar

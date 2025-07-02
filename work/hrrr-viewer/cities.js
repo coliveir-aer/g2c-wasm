@@ -42,7 +42,6 @@ export function drawCityMarkers(ctx, appState) {
         return;
     }
 
-    // A simple zoom-like filter based on population
     const populationThreshold = 2000000;
 
     const citiesToShow = cityState.allCities.filter(city => {
@@ -85,8 +84,6 @@ export function drawCityMarkers(ctx, appState) {
     });
 }
 
-// --- HELPER FUNCTIONS ---
-
 /**
  * Finds the temperature from the GRIB data grid for a specific lat/lon point.
  * @param {number} lat - The latitude of the location.
@@ -112,8 +109,7 @@ export function getTemperatureAtLocation(lat, lon, decodedData) {
     }
 
     // Calculate the index in the 1D data array.
-    // The data is flipped vertically, so we must account for that here.
-    const index = (ny - 1 - gridY) * nx + gridX;
+    const index = gridY * nx + gridX;
 
     return values[index] || null;
 }

@@ -1,4 +1,5 @@
 // /work/viewer/cities.js
+import { projection } from './main.js';
 
 // --- APPLICATION STATE (scoped to this module) ---
 const cityState = {
@@ -34,9 +35,8 @@ export async function loadCityData() {
  * Draws city markers directly onto the main canvas.
  * @param {CanvasRenderingContext2D} ctx - The 2D context of the canvas to draw on.
  * @param {object} appState - The main application state object.
- * @param {Function} projection - The function to convert [lon, lat] to [x, y] pixel coords.
  */
-export function drawCityMarkers(ctx, appState, projection) {
+export function drawCityMarkers(ctx, appState) {
     if (!appState.lastDecodedData) {
         console.log("Skipping city marker drawing: No decoded data available.");
         return;
@@ -94,25 +94,26 @@ export function drawCityMarkers(ctx, appState, projection) {
  * @param {{metadata: object, values: Float32Array}} decodedData - The decoded GRIB data.
  * @returns {number|null} The temperature in Kelvin, or null if out of bounds.
  */
-function getTemperatureAtLocation(lat, lon, decodedData) {
-    // This function remains the same as it operates on GRIB grid indices, not map coordinates.
-    const { metadata, values } = decodedData;
-    const { nx, ny, lat_first, lon_first, lat_last, lon_last } = metadata.grid;
+export function getTemperatureAtLocation(lat, lon, decodedData) {
+    const { values } = decodedData;
+    const nx = 1799;
+    const ny = 1059;
 
-    // This logic is for lat/lon grids and may need adjustment for HRRR if metadata was complete.
-    // For now, we assume it's close enough for this demonstration.
-    const normalizedLon = (lon < 0) ? lon + 360 : lon;
+    // Use the same projection function to convert lat/lon to grid coordinates
+    const [i, j] = projection([lon, lat]);
 
-    const lonStep = (lon_last - lon_first) / (nx - 1);
-    const latStep = (lat_first - lat_last) / (ny - 1); 
+    // Round to the nearest grid point
+    const gridX = Math.round(i);
+    const gridY = Math.round(j);
 
-    const i = Math.round((normalizedLon - lon_first) / lonStep);
-    const j = Math.round((lat_first - lat) / latStep);
-
-    if (i < 0 || i >= nx || j < 0 || j >= ny) {
+    // Check if the calculated indices are within the grid bounds
+    if (gridX < 0 || gridX >= nx || gridY < 0 || gridY >= ny) {
         return null;
     }
 
-    const index = j * nx + i;
+    // Calculate the index in the 1D data array.
+    // The data is flipped vertically, so we must account for that here.
+    const index = (ny - 1 - gridY) * nx + gridX;
+
     return values[index] || null;
 }

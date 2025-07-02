@@ -83,7 +83,7 @@ const AVAILABLE_PRODUCTS = {
 
 // --- MODULE IMPORTS ---
 import { updateColorBar } from './colorbar.js';
-import { loadCityData, drawCityMarkers } from './cities.js';
+import { loadCityData, drawCityMarkers, getTemperatureAtLocation } from './cities.js';
 
 // --- APPLICATION STATE ---
 const appState = {
@@ -109,7 +109,7 @@ const domElements = {
 };
 
 // --- CUSTOM PROJECTION LOGIC ---
-const projection = (function() {
+export const projection = (function() {
     // Official HRRR Projection Parameters from NOAA.
     const R = 6371229;    // Radius of the Earth in meters
     const lat_1 = 25.0;   // Standard parallel
@@ -437,7 +437,7 @@ async function renderDataOnCanvas(decodedData) {
     } else {
         displayMin = 5; displayMax = 75; displayUnit = 'dBZ'; labelIncrement = 10;
         displayColorScale = (val) => colorScale(val);
-        renderLoop(val => val); // No transform needed for reflectivity
+        renderLoop(val => val);
     }
     
     ctx.putImageData(imageData, 0, 0);

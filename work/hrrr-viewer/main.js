@@ -173,7 +173,7 @@ async function initializeApp() {
 
     // Create a new Leaflet Coordinate Reference System (CRS) using the Proj4 definition.
     const crs = new L.Proj.CRS('EPSG:32767', hrrrProjection, {
-        resolutions: [ 16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1 ],
+        resolutions: [ 8192, 4096, 2048, 1024, 512, 256, 128 ],
         bounds: hrrrProjectedBounds
     });
 
@@ -184,19 +184,14 @@ async function initializeApp() {
         attributionControl: false,
         maxBounds: hrrrLatLngBounds, // Restrict panning to the data area
         maxBoundsViscosity: 1.0,     // Make the bounds solid
-        minZoom: 3                   // Prevent zooming out too far
     }); 
     
-    // Set the initial view to fit the data bounds perfectly.
-    appState.map.fitBounds(hrrrLatLngBounds);
+    // Set the initial view to a standard center/zoom for the CONUS.
+    appState.map.setView([39.8, -98.5], 0);
     
-    // Re-enable the WMS tile layer now that the projection and bounds are correct.
-    L.tileLayer.wms('https://basemap.nationalmap.gov/arcgis/services/USGSTopo/MapServer/WmsServer', {
-        layers: '0',
-        format: 'image/png',
-        transparent: true,
-        crs: crs, // Use the custom HRRR CRS
-        attribution: 'USGS The National Map'
+    // Use a standard OpenStreetMap tile layer. Proj4Leaflet will handle the reprojection.
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(appState.map);
     
     L.control.zoom({ position: 'topright' }).addTo(appState.map);

@@ -10,6 +10,7 @@ INSTALL_DIR=${BASE_DIR}/install
 FINAL_DIST_DIR=/app/jsgrib
 FINAL_DIST_DIR2=/app/test-site
 FINAL_DIST_DIR3=/app/viewer
+FINAL_DIST_DIR4=/app/hrrr-viewer
 
 # --- 1. Clean and Configure ---
 echo "--- [g2c-wasm] STEP 1: Cleaning and Configuring Project... ---"
@@ -41,8 +42,9 @@ cp g2clib.wasm ${FINAL_DIST_DIR}/
 
 cp g2clib.js g2clib.wasm ${FINAL_DIST_DIR2}/
 cp g2clib.js g2clib.wasm ${FINAL_DIST_DIR3}/
+cp g2clib.js g2clib.wasm ${FINAL_DIST_DIR4}/
 
 
 echo "--- [g2c-wasm] BUILD COMPLETE ---"
-echo "WASM artifacts have been successfully placed in: $FINAL_DIST_DIR"
+echo "WASM artifacts have been successfully placed in: $FINAL_DIST_DIR, $FINAL_DIST_DIR2, $FINAL_DIST_DIR3, and $FINAL_DIST_DIR4"
 

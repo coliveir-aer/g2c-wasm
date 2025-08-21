@@ -4,7 +4,9 @@ This project demonstrates a WebAssembly (WASM) wrapper for the [NOAA NCEPLIBS-g2
 
 The core of the project is a C wrapper around `NCEPLIBS-g2c` and its dependencies, compiled to WebAssembly using Emscripten. This allows web applications to perform data extraction without needing a server-side backend.
 
-An example deployment of the GFS Live demo site is up at: [https://coliveir-aer.github.io/g2c-wasm/](https://coliveir-aer.github.io/g2c-wasm/)
+There are 2 demo sites deployed using this library:
+  GFS 2m temperature and precip products: [https://coliveir-aer.github.io/g2c-wasm/](https://coliveir-aer.github.io/g2c-wasm/)
+  HRRR 2m temperature and precip products: [https://coliveir-aer.github.io/g2c-wasm/hrrr/](https://coliveir-aer.github.io/g2c-wasm/hrrr/)
 
 ---
 
